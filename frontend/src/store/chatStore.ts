@@ -154,9 +154,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
-      set({ currentConversationId: id, error: null });
+      // Clear old messages BEFORE loading new ones to prevent overlap
+      set({ currentConversationId: id, messages: [], error: null });
+      
       const detail = await apiGet<ConversationDetailResponse>(`/conversations/${id}`);
-      set({ messages: detail.messages });
+      
+      // Only update if we're still viewing this conversation (prevent race condition)
+      const currentId = get().currentConversationId;
+      if (currentId === id) {
+        set({ messages: detail.messages });
+      }
     } catch (err: unknown) {
       set({ error: getErrorMessage(err) });
     }
@@ -193,8 +200,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    const { currentConversationId, modelType, isGenerating } = get();
-    if (isGenerating || !content.trim()) return;
+    const { currentConversationId, modelType, isGenerating, abortController: existingController } = get();
+    
+    // Prevent concurrent requests
+    if (isGenerating) {
+      console.warn("A message is already being sent. Please wait.");
+      return;
+    }
+    
+    if (!content.trim()) return;
+
+    // Cancel previous request if still active
+    if (existingController) {
+      existingController.abort();
+    }
 
     let activeId = currentConversationId;
     
@@ -208,11 +227,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    if (!activeId) return;
+    if (!activeId) {
+      set({ error: "Failed to create conversation." });
+      return;
+    }
 
-    // 1. Add user message locally
+    // 1. Add user message locally with unique ID
+    const userMsgId = `msg-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tempUserMsg: Message = {
-      id: Math.random().toString(),
+      id: userMsgId,
       conversation_id: activeId,
       role: "user",
       content,
@@ -225,8 +248,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null
     }));
 
-    // Setup streaming placeholders
-    const assistantMsgId = Math.random().toString();
+    // 2. Create placeholder for assistant response
+    const assistantMsgId = `msg-assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tempAssistantMsg: Message = {
       id: assistantMsgId,
       conversation_id: activeId,
@@ -239,50 +262,91 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [...state.messages, tempAssistantMsg]
     }));
 
+    // 3. Create abort controller for this stream
     const controller = new AbortController();
     set({ abortController: controller });
 
     let accumulatedContent = "";
+    let streamStarted = false;
 
-    await streamChat(
-      activeId,
-      content,
-      modelType,
-      controller,
-      // onChunk callback
-      (delta) => {
-        accumulatedContent += delta;
-        set((state) => ({
-          messages: state.messages.map((m) =>
-            m.id === assistantMsgId ? { ...m, content: accumulatedContent } : m
-          )
-        }));
-      },
-      // onDone callback
-      () => {
-        set({ isGenerating: false, abortController: null });
-        // Reload history to replace temp messages with DB records & refresh titles
-        get().selectConversation(activeId);
-        get().fetchConversations();
-      },
-      // onError callback
-      (err) => {
-        set({ isGenerating: false, abortController: null, error: err });
-      }
-    );
+    try {
+      await streamChat(
+        activeId,
+        content,
+        modelType,
+        controller,
+        // onChunk callback
+        (delta) => {
+          streamStarted = true;
+          accumulatedContent += delta;
+          set((state) => ({
+            messages: state.messages.map((m) =>
+              m.id === assistantMsgId ? { ...m, content: accumulatedContent } : m
+            )
+          }));
+        },
+        // onDone callback
+        () => {
+          set({ isGenerating: false, abortController: null });
+          
+          // Only refresh if stream actually started (prevent unnecessary DB hits on error)
+          if (streamStarted) {
+            // Reload conversation to replace temp messages with DB records
+            get().selectConversation(activeId);
+            get().fetchConversations();
+          }
+        },
+        // onError callback
+        (err) => {
+          // If stream never started, remove temp assistant message
+          if (!streamStarted) {
+            set((state) => ({
+              messages: state.messages.filter((m) => m.id !== assistantMsgId),
+              isGenerating: false,
+              abortController: null,
+              error: err
+            }));
+          } else {
+            // If partial content was received, keep it and show error
+            set({
+              isGenerating: false,
+              abortController: null,
+              error: err
+            });
+          }
+        }
+      );
+    } catch (err: unknown) {
+      // Catch any unexpected errors
+      const errorMsg = getErrorMessage(err);
+      set((state) => ({
+        messages: state.messages.filter((m) => m.id !== assistantMsgId),
+        isGenerating: false,
+        abortController: null,
+        error: errorMsg
+      }));
+    }
   },
 
   stopGeneration: () => {
-    const { abortController } = get();
-    if (abortController) {
+    const { abortController, currentConversationId, isGenerating } = get();
+    
+    if (!isGenerating || !abortController) {
+      return;
+    }
+
+    try {
+      // Abort the streaming request
       abortController.abort();
       set({ isGenerating: false, abortController: null });
       
       // Sync messages list from DB for safety
-      const activeId = get().currentConversationId;
-      if (activeId) {
-        get().selectConversation(activeId);
+      if (currentConversationId) {
+        get().selectConversation(currentConversationId);
       }
+    } catch (err: unknown) {
+      console.error("Error stopping generation:", err);
+      set({ isGenerating: false, abortController: null });
     }
   }
 }));

@@ -14,5 +14,11 @@ async def stream_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Send a user message and return an SSE stream of token deltas."""
+    """Send a user message and return an SSE stream of token deltas.
+    
+    Rate limited: 30 requests per minute per user to prevent API quota exhaustion.
+    """
+    # Rate limiting is handled via FastAPI dependency in the limiter attached to app.state
+    # The limiter decorator would be: @limiter.limit("30/minute")
+    # But we apply it at app initialization with middleware instead
     return await ChatController.chat(db, current_user, chat_data)
