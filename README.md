@@ -306,18 +306,4 @@ It is designed as:
 
 > A provider-independent LLM orchestration platform with conversational UI.
 
----
-
-# License
-
-MIT License
-
----
-
-# Final Note
-
-The primary objective of Dushman AI is architectural correctness, provider abstraction, and scalable AI infrastructure design.
-
-The chat interface is the product surface.
-
 The orchestration layer is the real system.
