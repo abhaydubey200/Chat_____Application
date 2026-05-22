@@ -1,24 +1,55 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const AUTH_COOKIE = "dushman_auth_token";
+
+const getAuthCookie = (): string | null => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${AUTH_COOKIE}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+const setAuthCookie = (token: string) => {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${AUTH_COOKIE}=${encodeURIComponent(token)}; Path=/; SameSite=Lax${secure}`;
+};
+
+const clearAuthCookie = () => {
+  if (typeof document === "undefined") return;
+  document.cookie = `${AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+};
 
 // Helper to get auth token from localStorage
 export const getAuthToken = (): string | null => {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("dushman_auth_token");
+  if (typeof window === "undefined") {
+    return null;
   }
-  return null;
+
+  const storedToken = localStorage.getItem(AUTH_COOKIE);
+  if (storedToken) {
+    return storedToken;
+  }
+
+  const cookieToken = getAuthCookie();
+  if (cookieToken) {
+    localStorage.setItem(AUTH_COOKIE, cookieToken);
+  }
+
+  return cookieToken;
 };
 
 // Helper to set auth token
 export const setAuthToken = (token: string) => {
   if (typeof window !== "undefined") {
-    localStorage.setItem("dushman_auth_token", token);
+    localStorage.setItem(AUTH_COOKIE, token);
+    setAuthCookie(token);
   }
 };
 
 // Helper to clear auth token
 export const clearAuthToken = () => {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("dushman_auth_token");
+    localStorage.removeItem(AUTH_COOKIE);
+    clearAuthCookie();
   }
 };
 
@@ -105,16 +136,17 @@ export async function streamChat(
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
+    let currentEvent = "";
 
+    // Iterative read loop to avoid potential stack buildup from recursion
+    // in long-lived streaming sessions
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\r\n");
+      const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
-
-      let currentEvent = "";
 
       for (const line of lines) {
         if (!line.trim()) continue;

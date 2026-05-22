@@ -11,10 +11,16 @@ import {
   X, 
   LogOut, 
   User as UserIcon,
-  Bot
+  Bot,
+  ChevronLeft,
+  Loader2
 } from "lucide-react";
 
-export default function ChatSidebar() {
+interface ChatSidebarProps {
+  onClose?: () => void;
+}
+
+export default function ChatSidebar({ onClose }: ChatSidebarProps) {
   const {
     user,
     conversations,
@@ -30,9 +36,16 @@ export default function ChatSidebar() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [loadingConversations, setLoadingConversations] = useState(true);
 
   useEffect(() => {
-    fetchConversations();
+    let mounted = true;
+    const load = async () => {
+      await fetchConversations();
+      if (mounted) setLoadingConversations(false);
+    };
+    load();
+    return () => { mounted = false; };
   }, [fetchConversations]);
 
   const handleCreateChat = async () => {
@@ -70,15 +83,28 @@ export default function ChatSidebar() {
     }
   };
 
+  const handleConversationKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    chatId: string,
+    isEditing: boolean
+  ) => {
+    if (isEditing) return;
+
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      selectConversation(chatId);
+    }
+  };
+
   return (
     <aside className="w-80 border-r border-slate-800 bg-slate-950 flex flex-col h-full text-slate-200">
       {/* Sidebar Header */}
       <div className="p-5 border-b border-slate-900 flex items-center gap-2.5">
         <div className="p-1.5 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 shadow-md">
-          <Bot className="w-5 h-5 text-white" />
+          <Bot className="size-5 text-white" />
         </div>
         <div>
-          <h1 className="font-bold text-base bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+          <h1 className="font-semibold text-base text-white">
             Dushman AI
           </h1>
           <span className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">
@@ -94,14 +120,19 @@ export default function ChatSidebar() {
           disabled={isGenerating}
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 transition-all duration-300 shadow-lg shadow-indigo-600/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="size-4" />
           New Conversation
         </button>
       </div>
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto px-3 space-y-1.5 custom-scrollbar">
-        {conversations.length === 0 ? (
+        {loadingConversations ? (
+          <div className="flex flex-col items-center py-10 px-4">
+            <Loader2 className="size-5 text-slate-600 animate-spin mb-2" />
+            <span className="text-[10px] text-slate-600 font-mono">Loading conversations…</span>
+          </div>
+        ) : conversations.length === 0 ? (
           <div className="text-center py-8 px-4 text-xs text-slate-600">
             No conversations yet. Start a new one!
           </div>
@@ -114,6 +145,9 @@ export default function ChatSidebar() {
               <div
                 key={chat.id}
                 onClick={() => !isEditing && selectConversation(chat.id)}
+                onKeyDown={(e) => handleConversationKeyDown(e, chat.id, isEditing)}
+                role="button"
+                tabIndex={0}
                 className={`group flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer transition-all duration-200 border
                   ${isSelected 
                     ? "bg-slate-900 border-slate-800 text-white shadow-inner" 
@@ -122,7 +156,7 @@ export default function ChatSidebar() {
                 `}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <MessageSquare className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-violet-400" : "text-slate-600"}`} />
+                  <MessageSquare className={`size-4 flex-shrink-0 ${isSelected ? "text-violet-400" : "text-slate-600"}`} />
                   
                   {isEditing ? (
                     <input
@@ -131,7 +165,6 @@ export default function ChatSidebar() {
                       onChange={(e) => setEditTitle(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       className="bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5 text-xs w-full focus:outline-none focus:border-violet-500"
-                      autoFocus
                     />
                   ) : (
                     <span className="text-xs font-medium truncate">
@@ -148,13 +181,13 @@ export default function ChatSidebar() {
                         onClick={(e) => handleSaveEdit(chat.id, e)}
                         className="p-1 rounded hover:bg-slate-800 text-emerald-400 transition"
                       >
-                        <Check className="w-3.5 h-3.5" />
+                        <Check className="size-3.5" />
                       </button>
                       <button
                         onClick={handleCancelEdit}
                         className="p-1 rounded hover:bg-slate-800 text-rose-400 transition"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="size-3.5" />
                       </button>
                     </>
                   ) : (
@@ -163,13 +196,13 @@ export default function ChatSidebar() {
                         onClick={(e) => handleStartEdit(chat.id, chat.title, e)}
                         className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition"
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Edit3 className="size-3.5" />
                       </button>
                       <button
                         onClick={(e) => handleDelete(chat.id, e)}
                         className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="size-3.5" />
                       </button>
                     </div>
                   )}
@@ -184,8 +217,8 @@ export default function ChatSidebar() {
       <div className="p-4 border-t border-slate-900 bg-slate-950/80">
         <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/50 border border-slate-900">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
-              <UserIcon className="w-4 h-4" />
+            <div className="size-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
+              <UserIcon className="size-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-300 truncate">
@@ -199,9 +232,9 @@ export default function ChatSidebar() {
           <button
             onClick={logout}
             title="Log Out"
-            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 border border-transparent hover:border-rose-900/30 transition-all cursor-pointer"
+            className="p-2 rounded-lg text-rose-200/80 hover:text-rose-100 hover:bg-rose-950/20 border border-transparent hover:border-rose-900/30 transition-all cursor-pointer"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="size-4" />
           </button>
         </div>
       </div>

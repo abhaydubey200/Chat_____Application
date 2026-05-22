@@ -329,8 +329,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   stopGeneration: () => {
-    const { abortController, currentConversationId, isGenerating } = get();
-    
+    const { abortController, isGenerating } = get();
+
     if (!isGenerating || !abortController) {
       return;
     }
@@ -339,11 +339,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Abort the streaming request
       abortController.abort();
       set({ isGenerating: false, abortController: null });
-      
-      // Sync messages list from DB for safety
-      if (currentConversationId) {
-        get().selectConversation(currentConversationId);
-      }
+      // Note: We intentionally do NOT fetch from DB here to avoid a race
+      // condition if the user immediately sends another message.
+      // The temp assistant message remains in state with whatever content
+      // was accumulated before abortion — the next DB refresh (via onDone
+      // callback or a subsequent selectConversation) will replace it.
     } catch (err: unknown) {
       console.error("Error stopping generation:", err);
       set({ isGenerating: false, abortController: null });

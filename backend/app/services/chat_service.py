@@ -1,5 +1,6 @@
 import uuid
 import logging
+import asyncio
 from datetime import datetime
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +60,10 @@ class ChatService:
             role="user",
             content=content
         )
+
+        # Update conversation timestamp
+        conversation.updated_at = datetime.utcnow()
+        db.add(conversation)
         
         # Auto-rename conversation if it's the first message
         history = await MessageRepository.get_history(db, conversation_id, limit=2)
@@ -188,6 +193,12 @@ class ChatService:
                 "content": full_text
             }
             
+        except asyncio.CancelledError:
+            logger.info(
+                "Stream cancelled before completion",
+                extra={"conversation_id": str(conversation_id)}
+            )
+            return
         except Exception as e:
             logger.error(
                 f"Unexpected error in stream_chat_response: {e}",

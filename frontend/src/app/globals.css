@@ -50,3 +50,70 @@ body {
   background: rgba(139, 92, 246, 0.3);
   color: #ffffff;
 }
+
+/* Fade-in animation utility */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-bottom {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-from-top {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+  animation-duration: 300ms;
+}
+
+.fade-in {
+  animation-name: fade-in;
+}
+
+.slide-in-from-bottom-1 {
+  animation-name: slide-in-from-bottom;
+}
+
+.slide-in-from-bottom-2 {
+  animation-name: slide-in-from-bottom;
+  animation-duration: 400ms;
+}
+
+.slide-in-from-top-2 {
+  animation-name: slide-in-from-top;
+}
+
+/* Streaming cursor animation for active generation */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: "▊";
+  animation: cursor-blink 1s step-end infinite;
+  color: rgb(139, 92, 246);
+  margin-left: 1px;
+}
+
+/* Focus ring utility */
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(139, 92, 246);
+  outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-pulse,
+  .animate-bounce-subtle,
+  .streaming-cursor::after {
+    animation: none !important;
+  }
+}

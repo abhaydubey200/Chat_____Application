@@ -57,13 +57,13 @@ export default function ModelSelector() {
             `}
           >
             <div className={`p-2 rounded-lg bg-gradient-to-br ${model.color} text-white`}>
-              <Icon className="w-4 h-4" />
+              <Icon className="size-4" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm leading-tight flex items-center gap-1.5">
                 {model.name}
                 {isActive && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 )}
               </div>
               <span className="text-[11px] text-slate-500 truncate block mt-0.5">

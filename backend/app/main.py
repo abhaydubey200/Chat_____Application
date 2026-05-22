@@ -1,12 +1,13 @@
 import logging
+import uuid
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZIPMiddleware
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from starlette.middleware.gzip import GZipMiddleware
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.api.routes import auth, conversations, chat
 
 # Set up structured logging
@@ -15,9 +16,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 # Initialize FastAPI App
 app = FastAPI(
@@ -33,8 +31,10 @@ app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse(
     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
     content={"detail": "Rate limit exceeded. Please try again later."}
 ))
+app.add_middleware(SlowAPIMiddleware)
 
 # Configure CORS based on environment
+allowed_origin_regex = None
 if settings.ENV == "production":
     if not settings.CORS_ORIGINS:
         logger.error("CORS_ORIGINS not configured for production mode. API requests will fail.")
@@ -50,17 +50,29 @@ else:
     ]
     if settings.CORS_ORIGINS:
         allowed_origins.extend(settings.CORS_ORIGINS)
+    allowed_origin_regex = r"^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):3000$"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # GZIP compression for responses
-app.add_middleware(GZIPMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Request ID tracing middleware
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach a unique request ID to every request for tracing."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 # Request size limit middleware
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2MB max request size

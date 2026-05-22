@@ -17,6 +17,8 @@ class AuthService:
         
         password_hash = security.get_password_hash(password)
         user = await UserRepository.create(db, email, password_hash)
+        await db.commit()
+        await db.refresh(user)
         return user
 
     @staticmethod

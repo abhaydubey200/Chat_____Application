@@ -12,10 +12,15 @@ import {
   Sparkles,
   Zap,
   Cpu,
-  AlertCircle
+  AlertCircle,
+  PanelLeft
 } from "lucide-react";
 
-export default function ChatWindow() {
+interface ChatWindowProps {
+  onToggleSidebar?: () => void;
+}
+
+export default function ChatWindow({ onToggleSidebar }: ChatWindowProps) {
   const {
     messages,
     isGenerating,
@@ -31,28 +36,33 @@ export default function ChatWindow() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Find current conversation title
   const activeConversation = conversations.find(c => c.id === currentConversationId);
   const chatTitle = activeConversation ? activeConversation.title : "New Conversation";
 
-  // Scroll to bottom helper
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+  // Scroll to bottom helper (memoized to maintain stable reference)
+  const scrollToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
-  };
+  }, []);
 
-  // Scroll automatically when messages change or streaming is active
+  const latestMessageContent = messages[messages.length - 1]?.content;
+
+  // Scroll automatically when new content arrives and user is already at bottom
   useEffect(() => {
+    if (!isAtBottom) return;
     scrollToBottom(isGenerating ? "auto" : "smooth");
-  }, [messages.length, isGenerating]);
+  }, [latestMessageContent, isGenerating, isAtBottom, scrollToBottom]);
 
-  // Monitor scroll height to show/hide "scroll to bottom" button
-  const handleScroll = () => {
+  // Monitor scroll height to show/hide "scroll to bottom" button (memoized)
+  const handleScroll = React.useCallback(() => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    // Show button if user is scrolled up by more than 400px
-    setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 400);
-  };
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    setShowScrollBtn(distanceFromBottom > 400);
+    setIsAtBottom(distanceFromBottom < 120);
+  }, []);
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -96,13 +106,22 @@ export default function ChatWindow() {
     <div className="flex-1 flex flex-col h-full bg-slate-900/10 text-slate-100 overflow-hidden relative">
       {/* Header */}
       <header className="h-16 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md flex items-center justify-between px-6 z-10">
+        {/* Desktop sidebar toggle (hidden on mobile — handled by DashboardClient) */}
+        <button
+          onClick={onToggleSidebar}
+          className="hidden lg:flex p-2 mr-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-900/50 transition-all duration-200"
+          title="Toggle Sidebar"
+        >
+          <PanelLeft className="size-4" />
+        </button>
+
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex-col min-w-0">
             <h2 className="text-sm font-semibold text-white truncate">
               {chatTitle}
             </h2>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <ModelIcon className={`w-3 h-3 ${modelInfo.color}`} />
+              <ModelIcon className={`size-3 ${modelInfo.color}`} />
               <span className="text-[10px] text-slate-400 font-medium font-mono">
                 {modelInfo.label}
               </span>
@@ -114,8 +133,8 @@ export default function ChatWindow() {
         <div className="flex items-center gap-2">
           {isGenerating && (
             <span className="flex items-center gap-1.5 text-xs text-violet-400 bg-violet-950/20 border border-violet-900/30 px-2.5 py-1 rounded-full font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
-              Thinking...
+              <span className="size-1.5 rounded-full bg-violet-500 animate-pulse" />
+              Thinking…
             </span>
           )}
         </div>
@@ -129,15 +148,15 @@ export default function ChatWindow() {
       >
         {messages.length === 0 ? (
           /* Empty / Welcome State */
-          <div className="flex-1 flex flex-col justify-center items-center px-4 py-12 max-w-3xl mx-auto w-full">
+          <div className="flex-1 flex flex-col justify-center items-center px-4 py-12 max-w-3xl mx-auto w-full animate-in fade-in duration-700">
             <div className="p-4 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 shadow-xl shadow-violet-600/10 mb-6 animate-bounce-subtle">
-              <Bot className="w-8 h-8 text-white" />
+              <Bot className="size-8 text-white" />
             </div>
             
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white text-center bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-3xl font-semibold text-white text-center">
               What can I help you build today?
             </h1>
-            <p className="text-slate-400 text-xs md:text-sm text-center mt-2 mb-8 max-w-md">
+            <p className="text-slate-400 text-xs md:text-sm text-center mt-2 mb-8 max-w-md leading-relaxed">
               Dushman AI orchestrates state-of-the-art LLMs to deliver code, analysis, and reasoning on demand. Select a model below to begin.
             </p>
 
@@ -148,16 +167,17 @@ export default function ChatWindow() {
 
             {/* Quick Prompts */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full mt-4">
-              {quickPrompts.map((prompt, idx) => (
+              {quickPrompts.map((prompt, index) => (
                 <button
-                  key={idx}
+                  key={prompt.title}
                   onClick={() => setInput(prompt.text)}
-                  className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/20 hover:border-slate-700/60 hover:bg-slate-900/50 transition-all duration-300 text-left group cursor-pointer"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                  className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/20 hover:border-slate-700/60 hover:bg-slate-900/50 hover:shadow-lg hover:shadow-violet-600/5 transition-all duration-300 text-left group cursor-pointer animate-in fade-in slide-in-from-bottom-2"
                 >
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white block">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white block transition-colors">
                     {prompt.title}
                   </span>
-                  <span className="text-[11px] text-slate-500 line-clamp-2 mt-1 block">
+                  <span className="text-[11px] text-slate-500 line-clamp-2 mt-1 block group-hover:text-slate-400 transition-colors">
                     {prompt.text}
                   </span>
                 </button>
@@ -167,15 +187,24 @@ export default function ChatWindow() {
         ) : (
           /* Messages List */
           <div className="flex-1 pb-24">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+            {messages.map((message, index) => (
+              <div
+                key={message.id}
+                className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                style={{
+                  animationDelay: index === messages.length - 1 && !message.content ? '0ms' : `${index % 5 * 30}ms`,
+                  animationFillMode: 'backwards',
+                }}
+              >
+                <MessageBubble message={message} />
+              </div>
             ))}
             
             {/* Error display */}
             {error && (
-              <div className="flex gap-4 p-4 md:px-6 bg-rose-950/10 border-b border-rose-900/20 text-rose-300 items-start">
-                <div className="w-8 h-8 rounded-xl bg-rose-950/40 border border-rose-900/30 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="w-4 h-4 text-rose-400" />
+              <div className="flex gap-4 p-4 md:px-6 bg-rose-950/10 border-b border-rose-900/20 text-rose-300 items-start animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="size-8 rounded-xl bg-rose-950/40 border border-rose-900/30 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="size-4 text-rose-400" />
                 </div>
                 <div className="flex-1 space-y-1">
                   <p className="text-xs font-bold text-rose-400">System Error</p>
@@ -195,7 +224,7 @@ export default function ChatWindow() {
           onClick={() => scrollToBottom()}
           className="absolute bottom-28 right-6 p-2 rounded-full border border-slate-800 bg-slate-950/80 text-slate-400 hover:text-white hover:bg-slate-900 shadow-xl backdrop-blur transition-all duration-200 cursor-pointer z-10 hover:scale-105"
         >
-          <ArrowDown className="w-4 h-4" />
+          <ArrowDown className="size-4" />
         </button>
       )}
 
@@ -207,7 +236,7 @@ export default function ChatWindow() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Message Dushman AI..."
+              placeholder="Message Dushman AI…"
               rows={1}
               className="w-full resize-none bg-transparent py-3.5 pl-4 pr-16 text-sm text-slate-200 placeholder-slate-500 focus:outline-none max-h-36 custom-scrollbar"
               style={{ height: "auto", minHeight: "48px" }}
@@ -221,7 +250,7 @@ export default function ChatWindow() {
                   className="p-2 rounded-xl text-rose-400 hover:text-rose-300 bg-rose-950/20 border border-rose-900/30 hover:bg-rose-950/30 transition-all duration-200 cursor-pointer shadow-lg shadow-rose-950/10"
                   title="Stop Generating"
                 >
-                  <Square className="w-4 h-4 fill-rose-400" />
+                  <Square className="size-4 fill-rose-400" />
                 </button>
               ) : (
                 <button
@@ -229,7 +258,7 @@ export default function ChatWindow() {
                   disabled={!input.trim()}
                   className="p-2 rounded-xl text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-md shadow-violet-600/10 disabled:opacity-30 disabled:hover:from-violet-600 disabled:hover:to-indigo-600 transition-all duration-200 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="size-4" />
                 </button>
               )}
             </div>
