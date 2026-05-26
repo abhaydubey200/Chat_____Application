@@ -5,9 +5,14 @@ from app.db.models import User
 
 class UserRepository:
     @staticmethod
-    async def create(db: AsyncSession, email: str, password_hash: str) -> User:
+    async def create(
+        db: AsyncSession,
+        email: str,
+        password_hash: str,
+        priority: int = 0
+    ) -> User:
         """Create a new user in the database."""
-        user = User(email=email, password_hash=password_hash)
+        user = User(email=email, password_hash=password_hash, priority=priority)
         db.add(user)
         await db.flush()  # Flush to populate the user.id
         return user

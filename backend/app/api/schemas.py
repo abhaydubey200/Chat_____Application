@@ -28,11 +28,13 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
+    priority: int
     created_at: datetime
 
 class TokenUser(BaseModel):
     id: str
     email: str
+    priority: int
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -118,3 +120,20 @@ class MessageResponse(BaseModel):
 class ConversationDetailResponse(BaseModel):
     conversation: ConversationResponse
     messages: List[MessageResponse]
+
+# --- Admin Analytics Schemas ---
+
+class UsageCount(BaseModel):
+    label: str
+    count: int
+
+class DailyRequestCount(BaseModel):
+    date: str
+    count: int
+
+class AdminAnalyticsResponse(BaseModel):
+    total_users: int
+    total_chats: int
+    provider_usage: List[UsageCount]
+    model_usage: List[UsageCount]
+    daily_requests: List[DailyRequestCount]

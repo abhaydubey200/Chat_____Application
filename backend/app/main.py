@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.cache import init_cache, close_cache
-from app.api.routes import auth, conversations, chat
+from app.api.routes import auth, conversations, chat, admin
 
 # Set up structured logging
 logging.basicConfig(
@@ -136,12 +136,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(conversations.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
+app.include_router(admin.router, prefix=settings.API_V1_STR)
 
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
     """Initialize app on startup."""
-    from app.core.database import verify_database_connection, init_db
+    from app.core.database import verify_database_connection, init_db, AsyncSessionLocal
+    from app.services.admin_service import AdminService
     
     logger.info(f"Starting {settings.PROJECT_NAME} (env={settings.ENV})")
     
@@ -158,6 +160,9 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
+
+    async with AsyncSessionLocal() as session:
+        await AdminService.ensure_admin_user(session)
 
     if settings.REDIS_ENABLED:
         await init_cache()

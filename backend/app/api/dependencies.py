@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.database import get_db
 from app.db.repositories.user_repository import UserRepository
+from app.core.config import settings
 from app.db.models import User
 
 # Standard OAuth2 Password Bearer scheme. Frontend sends token as authorization header Bearer <token>
@@ -39,3 +40,12 @@ async def get_current_user(
         raise credentials_exception
         
     return user
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Ensures the current user has admin privileges."""
+    if current_user.priority < settings.ADMIN_PRIORITY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required."
+        )
+    return current_user

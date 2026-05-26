@@ -86,6 +86,9 @@ async def init_db() -> None:
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0")
+        )
     logger.info("Database schema initialized")
 
 async def close_db() -> None:

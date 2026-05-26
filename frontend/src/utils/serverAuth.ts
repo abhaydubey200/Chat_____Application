@@ -9,7 +9,7 @@ export const getServerAuthState = async () => {
   const token = cookieStore.get(AUTH_COOKIE)?.value ?? null;
 
   if (!token) {
-    return { token: null, isAuthenticated: false };
+    return { token: null, isAuthenticated: false, user: null };
   }
 
   const response = await fetch(`${API_URL}/auth/me`, {
@@ -20,12 +20,13 @@ export const getServerAuthState = async () => {
   });
 
   if (response.status === 401) {
-    return { token, isAuthenticated: false };
+    return { token, isAuthenticated: false, user: null };
   }
 
   if (!response.ok) {
     throw new Error(`Auth check failed with status ${response.status}`);
   }
 
-  return { token, isAuthenticated: true };
+  const user = await response.json();
+  return { token, isAuthenticated: true, user };
 };

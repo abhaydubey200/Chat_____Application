@@ -5,6 +5,7 @@ set "ROOT=%~dp0"
 set "BACKEND=%ROOT%backend"
 set "FRONTEND=%ROOT%frontend"
 set "PYTHON=%BACKEND%\venv\Scripts\python.exe"
+set "COMPOSE_FILE=%ROOT%docker-compose.yml"
 
 echo [Dushman AI] Preparing backend...
 if not exist "%PYTHON%" (
@@ -13,6 +14,23 @@ if not exist "%PYTHON%" (
 )
 
 call "%PYTHON%" -m pip install -r "%BACKEND%\requirements.txt"
+
+echo [Dushman AI] Starting Redis (Docker)...
+docker compose version >nul 2>&1
+if not errorlevel 1 (
+  docker compose -f "%COMPOSE_FILE%" up -d redis
+) else (
+  docker-compose version >nul 2>&1
+  if errorlevel 1 (
+    echo [Dushman AI] Docker Compose not found. Install Docker Desktop and try again.
+    exit /b 1
+  )
+  docker-compose -f "%COMPOSE_FILE%" up -d redis
+)
+if errorlevel 1 (
+  echo [Dushman AI] Failed to start Redis with Docker Compose. Ensure Docker Desktop is running.
+  exit /b 1
+)
 
 echo [Dushman AI] Verifying Supabase connection...
 call "%PYTHON%" "%BACKEND%\verify_supabase.py"

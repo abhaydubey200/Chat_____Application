@@ -13,6 +13,7 @@ type TokenResponse = {
   user: {
     id: string;
     email: string;
+    priority: number;
   };
 };
 

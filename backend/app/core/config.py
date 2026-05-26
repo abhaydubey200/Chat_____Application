@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: list[str] = []
+
+    # Admin bootstrap
+    ADMIN_EMAIL: Optional[str] = None
+    ADMIN_PASSWORD: Optional[str] = None
+    ADMIN_PRIORITY: int = 9
     
     # LLM Provider Configuration
     # Options: "nvidia", "gemini"

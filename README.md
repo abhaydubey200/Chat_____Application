@@ -125,9 +125,13 @@ No code rewrites required.
 
 # Environment Variables
 
-Create a .env file inside the backend directory.
+Create a .env file inside the backend directory (see backend/.env.example for the full list).
 
 env # LLM LLM_PROVIDER=nvidia  LLM_MODEL_DEFAULT=qwen LLM_MODEL_FAST=gemma LLM_MODEL_REASONING=nemotron  LLM_API_KEY=your_api_key  # Database DATABASE_URL=postgresql://user:password@localhost/dushman_ai  # Security JWT_SECRET=your_secret JWT_ALGORITHM=HS256  # App APP_ENV=development 
+
+Redis caching (recommended):
+
+env REDIS_ENABLED=true REDIS_URL=redis://localhost:6379/0 REDIS_CACHE_TTL_SECONDS=30 RATE_LIMIT_STORAGE_URL=redis://localhost:6379/1
 
 ---
 
@@ -162,6 +166,10 @@ Run frontend:
 bash npm run dev 
 
 ---
+
+## 4. Docker (Full Stack)
+
+bash docker compose up --build
 
 # Streaming Architecture
 

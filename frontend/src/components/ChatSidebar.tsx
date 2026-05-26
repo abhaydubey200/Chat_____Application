@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useChatStore } from "../store/chatStore";
 import { 
   Plus, 
@@ -215,6 +216,14 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
 
       {/* Sidebar Footer */}
       <div className="p-4 border-t border-slate-900 bg-slate-950/80">
+        {user?.priority >= 9 && (
+          <Link
+            href="/admin"
+            className="mb-3 inline-flex w-full items-center justify-center rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:text-white hover:border-slate-700 hover:bg-slate-900 transition-all"
+          >
+            Admin Dashboard
+          </Link>
+        )}
         <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/50 border border-slate-900">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="size-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">

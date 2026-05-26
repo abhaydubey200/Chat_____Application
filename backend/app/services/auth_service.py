@@ -38,6 +38,7 @@ class AuthService:
             "token_type": "bearer",
             "user": {
                 "id": str(user.id),
-                "email": user.email
+                "email": user.email,
+                "priority": user.priority
             }
         }
