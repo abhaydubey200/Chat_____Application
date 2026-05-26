@@ -9,6 +9,7 @@ from app.db.models import Message
 from app.db.repositories.message_repository import MessageRepository
 from app.db.repositories.conversation_repository import ConversationRepository
 from app.services.llm_router import llm_router
+from app.core.cache import get_cache, invalidate_conversation_cache
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class ChatService:
         # Explicitly flush to ensure message is persisted
         await db.flush()
         await db.commit()
+        await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
 
     @staticmethod
     async def stream_chat_response(
@@ -166,6 +168,7 @@ class ChatService:
                 # Flush and commit with explicit error handling
                 await db.flush()
                 await db.commit()
+                await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
                 
                 logger.info(
                     f"Persisted assistant message",

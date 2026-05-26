@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = Field(..., min_length=10)
     SUPABASE_SSL_NO_VERIFY: bool = False
+
+    # Redis / Cache
+    REDIS_ENABLED: bool = False
+    REDIS_URL: Optional[str] = None
+    REDIS_CACHE_TTL_SECONDS: int = 30
+    RATE_LIMIT_STORAGE_URL: Optional[str] = None
     
     # CORS
     CORS_ORIGINS: list[str] = []
@@ -69,6 +75,8 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be set to a secure value.")
         if not self.DATABASE_URL:
             raise ValueError("DATABASE_URL must be configured.")
+        if self.REDIS_ENABLED and not self.REDIS_URL:
+            raise ValueError("REDIS_URL must be configured when REDIS_ENABLED=true.")
         if self.LLM_PROVIDER == "nvidia" and not self.NVIDIA_API_KEY:
             raise ValueError("NVIDIA_API_KEY must be configured when LLM_PROVIDER=nvidia.")
         if self.LLM_PROVIDER == "gemini" and not self.GEMINI_API_KEY:

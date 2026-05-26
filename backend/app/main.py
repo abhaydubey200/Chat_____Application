@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -8,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.cache import init_cache, close_cache
 from app.api.routes import auth, conversations, chat
 
 # Set up structured logging
@@ -72,6 +74,24 @@ async def request_id_middleware(request: Request, call_next):
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    return response
+
+# Basic request logging middleware
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    """Log request method, path, status, and latency."""
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    request_id = getattr(request.state, "request_id", "-")
+    logger.info(
+        "HTTP %s %s %s %.2fms rid=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        request_id,
+    )
     return response
 
 # Request size limit middleware
@@ -139,12 +159,17 @@ async def startup_event():
         logger.error(f"Failed to initialize database: {e}")
         raise
 
+    if settings.REDIS_ENABLED:
+        await init_cache()
+        logger.info("Redis cache initialized")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown."""
     from app.core.database import close_db
     
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
+    await close_cache()
     await close_db()
 
 @app.get("/health")

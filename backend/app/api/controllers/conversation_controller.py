@@ -3,7 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from app.db.repositories.conversation_repository import ConversationRepository
 from app.db.repositories.message_repository import MessageRepository
-from app.api.schemas import ConversationCreate, ConversationUpdate, ConversationResponse, ConversationDetailResponse
+from app.api.schemas import ConversationCreate, ConversationUpdate, ConversationResponse, ConversationDetailResponse, MessageResponse
+from app.core.cache import (
+    get_cache,
+    cache_json_get,
+    cache_json_set,
+    conversation_list_key,
+    conversation_detail_key,
+    invalidate_conversation_cache,
+)
+from app.core.config import settings
 
 class ConversationController:
     @staticmethod
@@ -11,12 +20,29 @@ class ConversationController:
         """Create a new conversation room."""
         conversation = await ConversationRepository.create(db, user_id, create_data.title)
         await db.commit()
+        await invalidate_conversation_cache(get_cache(), str(user_id))
         return conversation
 
     @staticmethod
     async def list_conversations(db: AsyncSession, user_id: uuid.UUID) -> list[ConversationResponse]:
         """Fetch all conversations belonging to the current user."""
+        cache = get_cache()
+        if cache:
+            cached = await cache_json_get(cache, conversation_list_key(str(user_id)))
+            if cached is not None:
+                return [ConversationResponse.model_validate(item) for item in cached]
         conversations = await ConversationRepository.list_by_user_id(db, user_id)
+        if cache:
+            payload = [
+                ConversationResponse.model_validate(item).model_dump(mode="json")
+                for item in conversations
+            ]
+            await cache_json_set(
+                cache,
+                conversation_list_key(str(user_id)),
+                payload,
+                settings.REDIS_CACHE_TTL_SECONDS,
+            )
         return conversations
 
     @staticmethod
@@ -26,6 +52,14 @@ class ConversationController:
         conversation_id: uuid.UUID
     ) -> ConversationDetailResponse:
         """Fetch conversation details including chat message history."""
+        cache = get_cache()
+        if cache:
+            cached = await cache_json_get(
+                cache,
+                conversation_detail_key(str(user_id), str(conversation_id)),
+            )
+            if cached is not None:
+                return ConversationDetailResponse.model_validate(cached)
         conversation = await ConversationRepository.get_by_id_and_user_id(db, conversation_id, user_id)
         if not conversation:
             raise HTTPException(
@@ -34,10 +68,21 @@ class ConversationController:
             )
         
         messages = await MessageRepository.get_history(db, conversation_id, limit=100)
-        return {
-            "conversation": conversation,
-            "messages": messages
+        payload = {
+            "conversation": ConversationResponse.model_validate(conversation).model_dump(mode="json"),
+            "messages": [
+                MessageResponse.model_validate(item).model_dump(mode="json")
+                for item in messages
+            ],
         }
+        if cache:
+            await cache_json_set(
+                cache,
+                conversation_detail_key(str(user_id), str(conversation_id)),
+                payload,
+                settings.REDIS_CACHE_TTL_SECONDS,
+            )
+        return payload
 
     @staticmethod
     async def update_conversation(
@@ -56,6 +101,7 @@ class ConversationController:
         
         updated_conv = await ConversationRepository.update_title(db, conversation, update_data.title)
         await db.commit()
+        await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
         return updated_conv
 
     @staticmethod
@@ -74,4 +120,5 @@ class ConversationController:
         
         await ConversationRepository.delete(db, conversation)
         await db.commit()
+        await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
         return {"status": "success", "message": "Conversation deleted."}
