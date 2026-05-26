@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.core.db_url import normalize_database_url
 
 class Settings(BaseSettings):
     # App Settings
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = Field(..., min_length=10)
+    SUPABASE_SSL_NO_VERIFY: bool = False
     
     # CORS
     CORS_ORIGINS: list[str] = []
@@ -36,7 +38,14 @@ class Settings(BaseSettings):
     # API Keys
     NVIDIA_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
-    
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url_value(cls, value: str) -> str:
+        if not value:
+            return value
+        return normalize_database_url(value)
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):

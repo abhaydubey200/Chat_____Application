@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 from app.core.config import settings
+from app.core.db_url import build_connect_args
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +20,18 @@ engine = create_async_engine(
     max_overflow=40,  # Allow burst capacity
     pool_pre_ping=True,  # Health check before using connection
     pool_recycle=3600,  # Recycle connections after 1 hour
-    connect_args={
-        "timeout": 10,  # Connection timeout
-        "command_timeout": 30,  # Command timeout
-        "server_settings": {
-            "application_name": settings.PROJECT_NAME,
-            "jit": "off"  # Disable query JIT for predictability
-        }
-    }
+    connect_args=build_connect_args(
+        settings.DATABASE_URL,
+        {
+            "timeout": 10,  # Connection timeout
+            "command_timeout": 30,  # Command timeout
+            "server_settings": {
+                "application_name": settings.PROJECT_NAME,
+                "jit": "off"  # Disable query JIT for predictability
+            },
+        },
+        disable_ssl_verify=settings.SUPABASE_SSL_NO_VERIFY,
+    ),
 )
 
 AsyncSessionLocal = async_sessionmaker(
