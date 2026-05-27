@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: list[str] = []
+
+    # Governance / DLP / Retention
+    GOVERNANCE_ENABLED: bool = True
+    DLP_ENTROPY_THRESHOLD: float = 4.2
+    DLP_MIN_SECRET_LENGTH: int = 16
+    DLP_MAX_MATCHES: int = 20
+    DLP_DEFAULT_ACTION: str = "warn"  # allow | warn | block | escalate
+    AUDIT_REDACT_CONTENT: bool = True
+    RETENTION_JOB_INTERVAL_MINUTES: int = 60
+    RETENTION_DEFAULT_SOFT_DELETE_DAYS: int = 30
+    RETENTION_DEFAULT_HARD_DELETE_DAYS: int = 90
     
     # LLM Provider Configuration
     # Options: "nvidia", "gemini"

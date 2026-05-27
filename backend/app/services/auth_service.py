@@ -1,6 +1,10 @@
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from app.db.repositories.user_repository import UserRepository
+from app.db.repositories.organization_repository import OrganizationRepository
+from app.db.repositories.org_membership_repository import OrgMembershipRepository
+from app.core.rbac import ROLE_SUPER_ADMIN, ROLE_EMPLOYEE
 from app.core import security
 from app.db.models import User
 
@@ -16,7 +20,10 @@ class AuthService:
             )
         
         password_hash = security.get_password_hash(password)
-        user = await UserRepository.create(db, email, password_hash)
+        org_name = f"{email.split('@')[0]}'s Org"
+        organization = await OrganizationRepository.create(db, org_name)
+        user = await UserRepository.create(db, email, password_hash, organization_id=organization.id)
+        await OrgMembershipRepository.create(db, organization.id, user.id, ROLE_SUPER_ADMIN)
         await db.commit()
         await db.refresh(user)
         return user
@@ -32,7 +39,21 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        access_token = security.create_access_token(subject=user.id)
+        session_id = str(uuid.uuid4())
+        role = ROLE_EMPLOYEE
+        org_id = str(user.organization_id) if user.organization_id else None
+        if user.organization_id:
+            membership = await OrgMembershipRepository.get_by_user_and_org(db, user.id, user.organization_id)
+            if membership:
+                role = membership.role
+        access_token = security.create_access_token(
+            subject=user.id,
+            extra_claims={
+                "sid": session_id,
+                "org_id": org_id,
+                "role": role,
+            },
+        )
         return {
             "access_token": access_token,
             "token_type": "bearer",

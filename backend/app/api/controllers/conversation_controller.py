@@ -13,14 +13,23 @@ from app.core.cache import (
     invalidate_conversation_cache,
 )
 from app.core.config import settings
+from app.services.audit_service import AuditService
 
 class ConversationController:
     @staticmethod
-    async def create(db: AsyncSession, user_id: uuid.UUID, create_data: ConversationCreate) -> ConversationResponse:
+    async def create(db: AsyncSession, user_id: uuid.UUID, create_data: ConversationCreate, organization_id: uuid.UUID | None = None) -> ConversationResponse:
         """Create a new conversation room."""
-        conversation = await ConversationRepository.create(db, user_id, create_data.title)
+        conversation = await ConversationRepository.create(db, user_id, create_data.title, organization_id=organization_id)
         await db.commit()
         await invalidate_conversation_cache(get_cache(), str(user_id))
+        AuditService.append_background(
+            event_type="conversation_created",
+            status="success",
+            user_id=user_id,
+            organization_id=organization_id,
+            conversation_id=conversation.id,
+            metadata={"title": conversation.title},
+        )
         return conversation
 
     @staticmethod
@@ -102,6 +111,14 @@ class ConversationController:
         updated_conv = await ConversationRepository.update_title(db, conversation, update_data.title)
         await db.commit()
         await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
+        AuditService.append_background(
+            event_type="conversation_renamed",
+            status="success",
+            user_id=user_id,
+            organization_id=conversation.organization_id,
+            conversation_id=conversation_id,
+            metadata={"new_title": update_data.title},
+        )
         return updated_conv
 
     @staticmethod
@@ -121,4 +138,11 @@ class ConversationController:
         await ConversationRepository.delete(db, conversation)
         await db.commit()
         await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
+        AuditService.append_background(
+            event_type="conversation_deleted",
+            status="success",
+            user_id=user_id,
+            organization_id=conversation.organization_id,
+            conversation_id=conversation_id,
+        )
         return {"status": "success", "message": "Conversation deleted."}

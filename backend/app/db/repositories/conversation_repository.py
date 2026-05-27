@@ -1,13 +1,19 @@
 import uuid
+from datetime import datetime
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Conversation
 
 class ConversationRepository:
     @staticmethod
-    async def create(db: AsyncSession, user_id: uuid.UUID, title: str) -> Conversation:
+    async def create(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        title: str,
+        organization_id: uuid.UUID | None = None,
+    ) -> Conversation:
         """Create a new conversation."""
-        conversation = Conversation(user_id=user_id, title=title)
+        conversation = Conversation(user_id=user_id, title=title, organization_id=organization_id)
         db.add(conversation)
         await db.flush()
         return conversation
@@ -17,7 +23,8 @@ class ConversationRepository:
         """Fetch a conversation by ID and verify user ownership."""
         stmt = select(Conversation).where(
             Conversation.id == conversation_id,
-            Conversation.user_id == user_id
+            Conversation.user_id == user_id,
+            Conversation.deleted_at.is_(None),
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
@@ -26,7 +33,8 @@ class ConversationRepository:
     async def list_by_user_id(db: AsyncSession, user_id: uuid.UUID, limit: int = 100, offset: int = 0) -> list[Conversation]:
         """List all conversations for a user, sorted by update time."""
         stmt = select(Conversation).where(
-            Conversation.user_id == user_id
+            Conversation.user_id == user_id,
+            Conversation.deleted_at.is_(None),
         ).order_by(
             desc(Conversation.updated_at)
         ).limit(limit).offset(offset)
@@ -43,7 +51,8 @@ class ConversationRepository:
 
     @staticmethod
     async def delete(db: AsyncSession, conversation: Conversation) -> None:
-        """Delete a conversation."""
-        await db.delete(conversation)
+        """Soft delete a conversation."""
+        conversation.deleted_at = conversation.deleted_at or datetime.utcnow()
+        db.add(conversation)
         await db.flush()
 _ = ConversationRepository

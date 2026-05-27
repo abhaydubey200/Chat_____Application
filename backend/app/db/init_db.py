@@ -1,6 +1,22 @@
 import asyncio
 from app.core.database import Base, engine
-from app.db.models import User, Conversation, Message  # Ensure models are imported for metadata registration
+from app.db.models import (
+    User,
+    Conversation,
+    Message,
+    Organization,
+    OrgMembership,
+    AuditLog,
+    UsageEvent,
+    DlpRule,
+    DlpEvent,
+    SecurityEvent,
+    ProviderPolicy,
+    ModelPolicy,
+    RetentionPolicy,
+    RetentionJob,
+    UsageDailyAggregate,
+)
 
 async def init_models():
     async with engine.begin() as conn:

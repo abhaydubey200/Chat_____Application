@@ -1,11 +1,16 @@
 import json
 import logging
 import asyncio
+import time
 from typing import AsyncGenerator
+from datetime import datetime
 import httpx
 from app.providers.base import BaseLLMProvider
+from app.core.observability import get_stream_context
+from app.core.observability.structured_logger import get_logger
+from app.core.observability.metrics import get_metrics, MetricType, Metric
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -108,84 +113,170 @@ class NvidiaProvider(BaseLLMProvider):
         self, client: httpx.AsyncClient, headers: dict, payload: dict, model: str
     ) -> AsyncGenerator[dict, None]:
         """Execute a single streaming request and yield parsed chunks."""
-        async with client.stream(
-            "POST",
-            self.base_url,
-            headers=headers,
-            json=payload,
-            timeout=httpx.Timeout(
-                timeout=self.STREAM_TIMEOUT,
-                read=self.CHUNK_TIMEOUT,
-            ),
-        ) as response:
-            if response.status_code != 200:
-                error_body = await response.aread()
-                error_msg = error_body.decode("utf-8", errors="ignore")
-                logger.error(
-                    "NVIDIA API error",
-                    extra={
-                        "status_code": response.status_code,
-                        "model": model,
-                        "error": error_msg[:200],
-                    },
-                )
-                yield {
-                    "type": "error",
-                    "content": f"NVIDIA API returned status {response.status_code}. Please try again.",
-                }
-                return
+        stream_ctx = get_stream_context()
+        request_start = datetime.utcnow()
+        
+        try:
+            async with client.stream(
+                "POST",
+                self.base_url,
+                headers=headers,
+                json=payload,
+                timeout=httpx.Timeout(
+                    timeout=self.STREAM_TIMEOUT,
+                    read=self.CHUNK_TIMEOUT,
+                ),
+            ) as response:
+                # Record provider request time
+                if stream_ctx:
+                    stream_ctx.provider_request_time = request_start
+                
+                if response.status_code == 429:
+                    # Rate limit
+                    error_body = await response.aread()
+                    error_msg = error_body.decode("utf-8", errors="ignore")
+                    get_metrics().increment_provider_rate_limits()
+                    logger.warning(
+                        "NVIDIA API rate limit hit",
+                        extra={
+                            "status_code": response.status_code,
+                            "model": model,
+                            "provider": "nvidia",
+                        },
+                    )
+                    yield {
+                        "type": "error",
+                        "content": f"NVIDIA API rate limited. Please try again later.",
+                    }
+                    return
+                
+                if response.status_code != 200:
+                    error_body = await response.aread()
+                    error_msg = error_body.decode("utf-8", errors="ignore")
+                    logger.error(
+                        "NVIDIA API error",
+                        extra={
+                            "status_code": response.status_code,
+                            "model": model,
+                            "error": error_msg[:200],
+                            "provider": "nvidia",
+                            "error_category": "provider_error",
+                        },
+                    )
+                    yield {
+                        "type": "error",
+                        "content": f"NVIDIA API returned status {response.status_code}. Please try again.",
+                    }
+                    return
 
-            async for line in response.aiter_lines():
-                if not line or not line.strip():
-                    continue
-
-                if line.startswith("data:"):
-                    data_str = line[5:].strip()
-
-                    if data_str == "[DONE]":
-                        logger.debug(f"Stream completed for model={model}")
-                        break
-
-                    try:
-                        data_json = json.loads(data_str)
-                        choices = data_json.get("choices", [])
-
-                        if choices:
-                            delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
-
-                            if content:
-                                yield {
-                                    "type": "delta",
-                                    "content": content,
-                                }
-
-                    except json.JSONDecodeError as e:
-                        logger.warning(
-                            "Failed to parse SSE chunk",
-                            extra={"model": model, "error": str(e)[:100]},
-                        )
+                chunk_count = 0
+                async for line in response.aiter_lines():
+                    if not line or not line.strip():
                         continue
+
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+
+                        if data_str == "[DONE]":
+                            logger.debug(
+                                f"NVIDIA stream completed",
+                                extra={
+                                    "model": model,
+                                    "provider": "nvidia",
+                                    "chunk_count": chunk_count,
+                                },
+                            )
+                            break
+
+                        try:
+                            data_json = json.loads(data_str)
+                            choices = data_json.get("choices", [])
+
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content", "")
+
+                                if content:
+                                    chunk_count += 1
+                                    # Record first token latency
+                                    if chunk_count == 1 and stream_ctx:
+                                        stream_ctx.first_token_time = datetime.utcnow()
+                                    
+                                    yield {
+                                        "type": "delta",
+                                        "content": content,
+                                    }
+
+                        except json.JSONDecodeError as e:
+                            logger.warning(
+                                "Failed to parse NVIDIA SSE chunk",
+                                extra={
+                                    "model": model,
+                                    "error": str(e)[:100],
+                                    "provider": "nvidia",
+                                },
+                            )
+                            continue
+                
+                # Record provider response time
+                if stream_ctx:
+                    stream_ctx.provider_response_time = datetime.utcnow()
+                    stream_ctx.provider_latency_ms = (
+                        stream_ctx.provider_response_time - request_start
+                    ).total_seconds() * 1000
+                    
+                    # Record metric
+                    get_metrics().record_metric(
+                        Metric(
+                            metric_type=MetricType.PROVIDER_RESPONSE_TIME,
+                            value=stream_ctx.provider_latency_ms,
+                            timestamp=datetime.utcnow(),
+                            tags={
+                                'provider': 'nvidia',
+                                'model': model,
+                                'status': 'success',
+                            }
+                        )
+                    )
+                
+        except Exception as e:
+            logger.error(
+                f"NVIDIA stream error: {e}",
+                extra={
+                    "model": model,
+                    "provider": "nvidia",
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True,
+            )
+            raise
 
     async def stream_chat(
         self, messages: list[dict], model: str
     ) -> AsyncGenerator[dict, None]:
-        """Stream chat response from NVIDIA API with retry support."""
+        """Stream chat response from NVIDIA API with retry support and observability."""
         headers = self._get_headers()
         payload = self._build_payload(model, messages, stream=True)
         full_content = []
         last_error = None
+        stream_ctx = get_stream_context()
+        metrics = get_metrics()
 
         for attempt in range(self.MAX_RETRIES + 1):
             if attempt > 0:
+                metrics.increment_retries()
                 logger.info(
                     "Retrying NVIDIA streaming request",
                     extra={
                         "model": model,
                         "attempt": attempt + 1,
                         "max_retries": self.MAX_RETRIES,
+                        "provider": "nvidia",
                     },
                 )
+                stream_ctx = get_stream_context()
+                if stream_ctx:
+                    stream_ctx.retry_count = attempt
                 await asyncio.sleep(self.RETRY_DELAY * attempt)
 
             try:
@@ -197,55 +288,106 @@ class NvidiaProvider(BaseLLMProvider):
                         if chunk["type"] == "delta":
                             full_content.append(chunk["content"])
                             chunk_count += 1
+                            if stream_ctx:
+                                stream_ctx.chunk_count += 1
                             yield chunk
                         elif chunk["type"] == "error":
                             last_error = chunk["content"]
                             break
 
                     if chunk_count > 0:
+                        logger.info(
+                            "NVIDIA stream completed successfully",
+                            extra={
+                                "model": model,
+                                "provider": "nvidia",
+                                "chunk_count": chunk_count,
+                            },
+                        )
                         break
 
             except httpx.TimeoutException as e:
-                logger.error(
-                    "Stream timeout from NVIDIA API",
+                metrics.increment_provider_timeouts()
+                logger.warning(
+                    "NVIDIA stream timeout",
                     extra={
                         "model": model,
                         "attempt": attempt + 1,
+                        "max_retries": self.MAX_RETRIES,
                         "timeout_type": type(e).__name__,
+                        "provider": "nvidia",
+                        "error_category": "provider_timeout",
                     },
                 )
                 if full_content:
+                    logger.info(
+                        "NVIDIA timeout - returning partial response",
+                        extra={
+                            "model": model,
+                            "provider": "nvidia",
+                            "partial_content_length": len("".join(full_content)),
+                        },
+                    )
                     yield {"type": "done", "content": "".join(full_content)}
                     return
                 last_error = f"Request to NVIDIA API timed out (attempt {attempt + 1})"
-                continue
+                if attempt < self.MAX_RETRIES:
+                    continue
+                else:
+                    break
 
             except httpx.HTTPError as e:
                 last_error = f"HTTP error: {str(e)[:100]}"
-                logger.error(
-                    "HTTP error connecting to NVIDIA API",
+                logger.warning(
+                    "NVIDIA HTTP error",
                     extra={
                         "model": model,
                         "attempt": attempt + 1,
+                        "max_retries": self.MAX_RETRIES,
                         "error_type": type(e).__name__,
+                        "provider": "nvidia",
+                        "error_category": "provider_error",
                     },
                 )
-                continue
+                if attempt < self.MAX_RETRIES:
+                    continue
+                else:
+                    break
 
             except Exception as e:
                 last_error = f"Unexpected error: {str(e)[:100]}"
                 logger.error(
-                    "Unexpected error in NVIDIA streaming",
-                    extra={"model": model, "attempt": attempt + 1},
+                    "NVIDIA unexpected error in streaming",
+                    extra={
+                        "model": model,
+                        "attempt": attempt + 1,
+                        "max_retries": self.MAX_RETRIES,
+                        "provider": "nvidia",
+                        "error_type": type(e).__name__,
+                    },
                     exc_info=True,
                 )
                 if attempt < self.MAX_RETRIES:
                     continue
-                break
+                else:
+                    break
 
         if full_content:
-            yield {"type": "done", "content": "".join(full_content)}
+            content = "".join(full_content)
+            if stream_ctx:
+                stream_ctx.total_tokens = len(content.split())
+            yield {"type": "done", "content": content}
         elif last_error:
+            metrics.increment_failed_requests()
+            logger.error(
+                "NVIDIA stream failed",
+                extra={
+                    "model": model,
+                    "provider": "nvidia",
+                    "error": last_error,
+                    "attempts": self.MAX_RETRIES + 1,
+                },
+            )
             yield {"type": "error", "content": last_error}
 
     # ------------------------------------------------------------------

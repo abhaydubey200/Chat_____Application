@@ -53,7 +53,7 @@ interface ChatState {
   initAuth: () => Promise<void>;
   login: (token: string, user: User) => void;
   signup: (token: string, user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   setModelType: (type: string) => void;
   
   // Conversation actions
@@ -106,18 +106,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ token, user, error: null });
   },
 
-  logout: () => {
-    removeToken();
-    set({
-      token: null,
-      user: null,
-      conversations: [],
-      currentConversationId: null,
-      messages: [],
-      isGenerating: false,
-      abortController: null,
-      error: null
-    });
+  logout: async () => {
+    try {
+      await apiPost("/auth/logout", {});
+    } catch (err: unknown) {
+      console.warn("Logout request failed", err);
+    } finally {
+      removeToken();
+      set({
+        token: null,
+        user: null,
+        conversations: [],
+        currentConversationId: null,
+        messages: [],
+        isGenerating: false,
+        abortController: null,
+        error: null
+      });
+    }
   },
 
   setModelType: (modelType) => set({ modelType }),

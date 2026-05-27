@@ -17,7 +17,7 @@ async def create_conversation(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new chat conversation."""
-    return await ConversationController.create(db, current_user.id, create_data)
+    return await ConversationController.create(db, current_user.id, create_data, current_user.organization_id)
 
 @router.get("", response_model=List[ConversationResponse])
 async def list_conversations(

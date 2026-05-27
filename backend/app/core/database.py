@@ -85,7 +85,44 @@ async def init_db() -> None:
     This should be called during application startup.
     """
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS governance"))
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("""
+        CREATE OR REPLACE FUNCTION governance.prevent_update_delete()
+        RETURNS trigger AS $$
+        BEGIN
+            IF TG_OP = 'DELETE' AND current_setting('governance.allow_delete', true) = 'true' THEN
+                RETURN OLD;
+            END IF;
+            RAISE EXCEPTION 'Immutable governance table: updates/deletes are not allowed';
+        END;
+        $$ LANGUAGE plpgsql;
+        """))
+        await conn.execute(text("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_logs_immutable') THEN
+                CREATE TRIGGER audit_logs_immutable
+                BEFORE UPDATE OR DELETE ON governance.audit_logs
+                FOR EACH ROW EXECUTE FUNCTION governance.prevent_update_delete();
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'usage_events_immutable') THEN
+                CREATE TRIGGER usage_events_immutable
+                BEFORE UPDATE OR DELETE ON governance.usage_events
+                FOR EACH ROW EXECUTE FUNCTION governance.prevent_update_delete();
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'dlp_events_immutable') THEN
+                CREATE TRIGGER dlp_events_immutable
+                BEFORE UPDATE OR DELETE ON governance.dlp_events
+                FOR EACH ROW EXECUTE FUNCTION governance.prevent_update_delete();
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'security_events_immutable') THEN
+                CREATE TRIGGER security_events_immutable
+                BEFORE UPDATE OR DELETE ON governance.security_events
+                FOR EACH ROW EXECUTE FUNCTION governance.prevent_update_delete();
+            END IF;
+        END $$;
+        """))
     logger.info("Database schema initialized")
 
 async def close_db() -> None:

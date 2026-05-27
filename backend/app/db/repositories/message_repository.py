@@ -29,7 +29,8 @@ class MessageRepository:
     async def get_history(db: AsyncSession, conversation_id: uuid.UUID, limit: int = 50) -> list[Message]:
         """Retrieve recent messages for a conversation, ordered chronologically."""
         stmt = select(Message).where(
-            Message.conversation_id == conversation_id
+            Message.conversation_id == conversation_id,
+            Message.deleted_at.is_(None),
         ).order_by(
             Message.created_at.asc()
         ).limit(limit)

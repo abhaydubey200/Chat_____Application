@@ -118,3 +118,134 @@ class MessageResponse(BaseModel):
 class ConversationDetailResponse(BaseModel):
     conversation: ConversationResponse
     messages: List[MessageResponse]
+
+# --- Governance Schemas ---
+
+class AuditLogResponse(BaseModel):
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+    id: uuid.UUID
+    request_id: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
+    conversation_id: Optional[uuid.UUID] = None
+    event_type: str
+    status: str
+    provider_name: Optional[str] = None
+    model_name: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    latency_ms: Optional[int] = None
+    metadata: Optional[dict] = Field(None, validation_alias="meta_data")
+    created_at: datetime
+
+class UsageEventResponse(BaseModel):
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+    id: uuid.UUID
+    request_id: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
+    conversation_id: Optional[uuid.UUID] = None
+    provider_name: str
+    model_name: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cost_usd: float
+    latency_ms: Optional[int] = None
+    stream_duration_ms: Optional[int] = None
+    retry_count: int
+    status: str
+    metadata: Optional[dict] = Field(None, validation_alias="meta_data")
+    created_at: datetime
+
+class DlpEventResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    request_id: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
+    conversation_id: Optional[uuid.UUID] = None
+    rule_id: Optional[uuid.UUID] = None
+    action: str
+    match_count: int
+    redacted_excerpt: Optional[str] = None
+    metadata: Optional[dict] = Field(None, validation_alias="meta_data")
+    created_at: datetime
+
+class SecurityEventResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    request_id: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
+    event_type: str
+    severity: str
+    status: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    metadata: Optional[dict] = Field(None, validation_alias="meta_data")
+    created_at: datetime
+
+class ProviderPolicyRequest(BaseModel):
+    organization_id: uuid.UUID
+    provider_name: str
+    is_enabled: bool = True
+    allow_reasoning: bool = True
+    max_cost_usd_per_day: Optional[float] = None
+    max_cost_usd_per_request: Optional[float] = None
+
+class ProviderPolicyResponse(ProviderPolicyRequest):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+class ModelPolicyRequest(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    organization_id: uuid.UUID
+    provider_name: str
+    model_name: str
+    is_enabled: bool = True
+    cost_per_1k_input: float = 0.0
+    cost_per_1k_output: float = 0.0
+
+class ModelPolicyResponse(ModelPolicyRequest):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+class DlpRuleRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    rule_type: str
+    pattern: str
+    action: str
+    severity: str = "medium"
+    is_active: bool = True
+
+class DlpRuleResponse(DlpRuleRequest):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+class RetentionPolicyRequest(BaseModel):
+    organization_id: uuid.UUID
+    data_type: str
+    soft_delete_after_days: Optional[int] = None
+    hard_delete_after_days: Optional[int] = None
+    is_active: bool = True
+
+class RetentionPolicyResponse(RetentionPolicyRequest):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
