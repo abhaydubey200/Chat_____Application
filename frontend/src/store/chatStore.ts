@@ -36,6 +36,7 @@ interface ConversationDetailResponse {
 interface User {
   id: string;
   email: string;
+  role?: string | null;
 }
 
 interface ChatState {

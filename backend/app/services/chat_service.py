@@ -1,7 +1,7 @@
 import uuid
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from app.services.provider_policy_service import ProviderPolicyService
 from app.services.security_event_service import SecurityEventService
 from app.core.config import settings
 from app.core.cache import get_cache, invalidate_conversation_cache
+from app.core.time import ensure_utc
 from app.core.observability import (
     get_logger,
     get_stream_context,
@@ -108,7 +109,8 @@ class ChatService:
             # If the last message has identical content and was created in the last 2 seconds,
             # it's likely a duplicate from the user clicking send twice
             if last_message and last_message.content == content:
-                time_diff = datetime.utcnow() - last_message.created_at
+                last_message_time = ensure_utc(last_message.created_at)
+                time_diff = datetime.now(timezone.utc) - last_message_time
                 if time_diff.total_seconds() < 2:
                     logger.warning(
                         "Duplicate message detected and skipped",
@@ -163,7 +165,7 @@ class ChatService:
             raise
 
         # Update conversation timestamp
-        conversation.updated_at = datetime.utcnow()
+        conversation.updated_at = datetime.now(timezone.utc)
         db.add(conversation)
         
         # Auto-rename conversation if it's the first message
@@ -339,7 +341,7 @@ class ChatService:
             # Inject system prompt for consistent behavior
             messages_payload.append({
                 "role": "system",
-                "content": "You are Dushman AI, a production-grade conversational AI assistant. You answer queries precisely, write clean code, maintain professional tone, and are helpful and concise."
+                "content": "You are ChatHub, a production-grade conversational AI assistant. You answer queries precisely, write clean code, maintain professional tone, and are helpful and concise."
             })
             
             # Add conversation history
@@ -489,7 +491,7 @@ class ChatService:
                 )
                 
                 # Update conversation's updated_at timestamp
-                conversation.updated_at = datetime.utcnow()
+                conversation.updated_at = datetime.now(timezone.utc)
                 db.add(conversation)
                 
                 # Flush and commit with explicit error handling

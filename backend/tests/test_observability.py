@@ -2,12 +2,12 @@
 Observability System Testing & Validation Guide
 
 This file contains examples and instructions for validating the production-grade
-observability infrastructure in Dushman AI.
+observability infrastructure in ChatHub.
 """
 
 import asyncio
 import json
-from datetime import datetime
+from app.core.time import utc_now
 from app.core.observability import (
     get_logger,
     configure_structured_logging,
@@ -87,7 +87,7 @@ class ObservabilityValidator:
             http_method="POST",
             http_path="/api/v1/chat",
             client_ip="192.168.1.1",
-            start_time=datetime.utcnow(),
+            start_time=utc_now(),
         )
         set_request_context(req_ctx)
         
@@ -103,7 +103,7 @@ class ObservabilityValidator:
         })
         
         # Update context
-        req_ctx.end_time = datetime.utcnow()
+        req_ctx.end_time = utc_now()
         req_ctx.http_status = 200
         
         print("\n2.3 Request context updated with response:")
@@ -139,7 +139,7 @@ class ObservabilityValidator:
             model_type="fast",
             provider_name="nvidia",
             model_name="qwen/qwen3.5",
-            stream_start_time=datetime.utcnow(),
+            stream_start_time=utc_now(),
         )
         set_stream_context(stream_ctx)
         
@@ -154,14 +154,14 @@ class ObservabilityValidator:
         
         # Simulate streaming
         stream_ctx.chunk_count = 256
-        stream_ctx.first_token_time = datetime.utcnow()
+        stream_ctx.first_token_time = utc_now()
         
         print("\n3.2 Stream in progress:")
         print(f"  First token latency: {stream_ctx.first_token_latency_ms():.2f}ms")
         print(f"  Chunks received: {stream_ctx.chunk_count}")
         
         # Complete stream
-        stream_ctx.stream_end_time = datetime.utcnow()
+        stream_ctx.stream_end_time = utc_now()
         stream_ctx.completion_reason = "completed"
         stream_ctx.total_tokens = 512
         
@@ -327,7 +327,7 @@ async def test_request_lifecycle():
         http_method="POST",
         http_path="/api/v1/chat",
         client_ip="192.168.1.1",
-        start_time=datetime.utcnow(),
+        start_time=utc_now(),
     )
     set_request_context(req_ctx)
     
@@ -346,7 +346,7 @@ async def test_request_lifecycle():
         user_id="user-123",
         model_type="fast",
         provider_name="nvidia",
-        stream_start_time=datetime.utcnow(),
+        stream_start_time=utc_now(),
     )
     set_stream_context(stream_ctx)
     
@@ -377,7 +377,7 @@ async def test_request_lifecycle():
     print("\n7.4 Stream Completion:")
     await asyncio.sleep(0.1)  # Simulate streaming
     
-    stream_ctx.stream_end_time = datetime.utcnow()
+    stream_ctx.stream_end_time = utc_now()
     stream_ctx.completion_reason = "completed"
     stream_ctx.chunk_count = 256
     stream_ctx.total_tokens = 512
@@ -398,7 +398,7 @@ async def test_request_lifecycle():
     
     # 5. Complete request
     print("\n7.5 Request Completion:")
-    req_ctx.end_time = datetime.utcnow()
+    req_ctx.end_time = utc_now()
     req_ctx.http_status = 200
     
     logger.log_request_end(
@@ -414,7 +414,7 @@ async def test_request_lifecycle():
 def run_all_tests():
     """Run all validation tests."""
     print("\n" + "="*80)
-    print("DUSHMAN AI - OBSERVABILITY SYSTEM VALIDATION")
+    print("CHAT_HUB - OBSERVABILITY SYSTEM VALIDATION")
     print("="*80)
     
     validator = ObservabilityValidator()

@@ -2,6 +2,7 @@
 
 import React, { ReactNode } from "react";
 import { AlertTriangle, RotateCw, LogOut } from "lucide-react";
+import { clearAuthToken } from "../utils/api";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -72,7 +73,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   handleLogout = () => {
     // Clear auth and redirect to login
     if (typeof window !== "undefined") {
-      localStorage.removeItem("dushman_auth_token");
+      clearAuthToken();
       window.location.href = "/login";
     }
   };

@@ -1,8 +1,9 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sqlalchemy import select, update, delete, text
 from app.core.database import AsyncSessionLocal
 from app.core.config import settings
+from app.core.time import utc_now
 from app.core.observability import get_logger
 from app.db.models import RetentionPolicy, RetentionJob, Conversation, Message, AuditLog, UsageEvent, DlpEvent, SecurityEvent
 
@@ -27,7 +28,7 @@ class RetentionService:
                 await session.flush()
 
                 total_affected = 0
-                now = datetime.utcnow()
+                now = utc_now()
 
                 if policy.data_type in {"conversations", "messages"}:
                     soft_days = policy.soft_delete_after_days or settings.RETENTION_DEFAULT_SOFT_DELETE_DAYS
@@ -95,7 +96,7 @@ class RetentionService:
 
                 job.records_affected = total_affected
                 job.status = "completed"
-                job.finished_at = datetime.utcnow()
+                job.finished_at = utc_now()
 
             await session.commit()
 

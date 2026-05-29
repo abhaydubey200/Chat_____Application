@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Conversation
+from app.core.time import utc_now
 
 class ConversationRepository:
     @staticmethod
@@ -52,7 +52,7 @@ class ConversationRepository:
     @staticmethod
     async def delete(db: AsyncSession, conversation: Conversation) -> None:
         """Soft delete a conversation."""
-        conversation.deleted_at = conversation.deleted_at or datetime.utcnow()
+        conversation.deleted_at = conversation.deleted_at or utc_now()
         db.add(conversation)
         await db.flush()
 _ = ConversationRepository

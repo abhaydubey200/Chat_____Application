@@ -13,7 +13,7 @@ import logging
 import sys
 import re
 from typing import Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.observability.tracing import get_correlation_dict
 
 
@@ -101,7 +101,7 @@ class StructuredFormatter(logging.Formatter):
             JSON-formatted log string
         """
         log_obj = {
-            'timestamp': datetime.utcfromtimestamp(record.created).isoformat() + 'Z',
+            'timestamp': datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),

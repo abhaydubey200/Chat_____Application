@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.organization_repository import OrganizationRepository
 from app.db.repositories.org_membership_repository import OrgMembershipRepository
-from app.core.rbac import ROLE_SUPER_ADMIN, ROLE_EMPLOYEE
+from app.core.rbac import ROLE_EMPLOYEE
 from app.core import security
 from app.db.models import User
 
@@ -23,7 +23,7 @@ class AuthService:
         org_name = f"{email.split('@')[0]}'s Org"
         organization = await OrganizationRepository.create(db, org_name)
         user = await UserRepository.create(db, email, password_hash, organization_id=organization.id)
-        await OrgMembershipRepository.create(db, organization.id, user.id, ROLE_SUPER_ADMIN)
+        await OrgMembershipRepository.create(db, organization.id, user.id, ROLE_EMPLOYEE)
         await db.commit()
         await db.refresh(user)
         return user
@@ -59,6 +59,7 @@ class AuthService:
             "token_type": "bearer",
             "user": {
                 "id": str(user.id),
-                "email": user.email
+                "email": user.email,
+                "role": role,
             }
         }

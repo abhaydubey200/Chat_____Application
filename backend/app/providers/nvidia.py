@@ -3,10 +3,10 @@ import logging
 import asyncio
 import time
 from typing import AsyncGenerator
-from datetime import datetime
 import httpx
 from app.providers.base import BaseLLMProvider
 from app.core.observability import get_stream_context
+from app.core.time import utc_now
 from app.core.observability.structured_logger import get_logger
 from app.core.observability.metrics import get_metrics, MetricType, Metric
 
@@ -114,7 +114,7 @@ class NvidiaProvider(BaseLLMProvider):
     ) -> AsyncGenerator[dict, None]:
         """Execute a single streaming request and yield parsed chunks."""
         stream_ctx = get_stream_context()
-        request_start = datetime.utcnow()
+        request_start = utc_now()
         
         try:
             async with client.stream(
@@ -200,7 +200,7 @@ class NvidiaProvider(BaseLLMProvider):
                                     chunk_count += 1
                                     # Record first token latency
                                     if chunk_count == 1 and stream_ctx:
-                                        stream_ctx.first_token_time = datetime.utcnow()
+                                        stream_ctx.first_token_time = utc_now()
                                     
                                     yield {
                                         "type": "delta",
@@ -220,7 +220,7 @@ class NvidiaProvider(BaseLLMProvider):
                 
                 # Record provider response time
                 if stream_ctx:
-                    stream_ctx.provider_response_time = datetime.utcnow()
+                    stream_ctx.provider_response_time = utc_now()
                     stream_ctx.provider_latency_ms = (
                         stream_ctx.provider_response_time - request_start
                     ).total_seconds() * 1000
@@ -230,7 +230,7 @@ class NvidiaProvider(BaseLLMProvider):
                         Metric(
                             metric_type=MetricType.PROVIDER_RESPONSE_TIME,
                             value=stream_ctx.provider_latency_ms,
-                            timestamp=datetime.utcnow(),
+                            timestamp=utc_now(),
                             tags={
                                 'provider': 'nvidia',
                                 'model': model,

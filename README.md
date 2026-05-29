@@ -91,7 +91,7 @@ Create `backend/.env` using `.env.example`. Key settings:
 |---|---|
 | `APP_ENV` | `development` or `production` |
 | `PROJECT_NAME` | Display name |
-| `JWT_SECRET` | JWT signing secret (min 32 chars) |
+| `JWT_SECRET` | JWT signing secret (min 64 chars) |
 | `DATABASE_URL` | `postgresql+asyncpg://...` |
 | `LLM_PROVIDER` | `nvidia` or `gemini` |
 | `NVIDIA_API_KEY` | Required if `LLM_PROVIDER=nvidia` |

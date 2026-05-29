@@ -7,16 +7,22 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class UserSignup(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128, description="Password must be 8-128 characters.")
+    password: str = Field(..., min_length=12, max_length=128, description="Password must be 12-128 characters.")
     
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        """Ensure password has reasonable complexity."""
+        """Ensure password has reasonable complexity (OWASP-aligned)."""
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters long.")
         if not any(c.isupper() for c in v):
             raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit.")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
+            raise ValueError("Password must contain at least one special character.")
         return v
 
 class UserLogin(BaseModel):
@@ -28,11 +34,13 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
+    role: str | None = None
     created_at: datetime
 
 class TokenUser(BaseModel):
     id: str
     email: str
+    role: str | None = None
 
 class TokenResponse(BaseModel):
     access_token: str

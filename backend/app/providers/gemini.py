@@ -1,10 +1,10 @@
 import json
-import logging
 from typing import AsyncGenerator
 import httpx
 from app.providers.base import BaseLLMProvider
+from app.core.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class GeminiProvider(BaseLLMProvider):

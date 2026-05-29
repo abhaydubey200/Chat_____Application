@@ -11,7 +11,9 @@ Provides:
 from dataclasses import dataclass, asdict
 from typing import Optional
 from datetime import datetime
+from app.core.time import utc_now
 from enum import Enum
+from threading import Lock
 
 
 class MetricType(str, Enum):
@@ -68,9 +70,14 @@ class MetricsSnapshot:
 
 
 class Metrics:
-    """Thread-safe metrics collector for operational monitoring."""
+    """Thread-safe metrics collector for operational monitoring.
+    
+    Uses a threading.Lock to protect mutable counters from concurrent access
+    in async contexts where multiple requests may increment counters simultaneously.
+    """
     
     def __init__(self):
+        self._lock = Lock()
         self._metrics: list[Metric] = []
         self._active_streams: int = 0
         self._total_requests: int = 0
@@ -83,65 +90,76 @@ class Metrics:
     
     def record_metric(self, metric: Metric) -> None:
         """Record a metric observation."""
-        self._metrics.append(metric)
+        with self._lock:
+            self._metrics.append(metric)
     
     def increment_active_streams(self, delta: int = 1) -> None:
         """Update active stream count."""
-        self._active_streams = max(0, self._active_streams + delta)
+        with self._lock:
+            self._active_streams = max(0, self._active_streams + delta)
     
     def increment_total_requests(self) -> None:
         """Increment total request count."""
-        self._total_requests += 1
+        with self._lock:
+            self._total_requests += 1
     
     def increment_failed_requests(self) -> None:
         """Increment failed request count."""
-        self._failed_requests += 1
+        with self._lock:
+            self._failed_requests += 1
     
     def increment_retries(self) -> None:
         """Increment retry attempt count."""
-        self._total_retries += 1
+        with self._lock:
+            self._total_retries += 1
     
     def increment_provider_rate_limits(self) -> None:
         """Increment provider rate limit hits."""
-        self._provider_rate_limits_hit += 1
+        with self._lock:
+            self._provider_rate_limits_hit += 1
     
     def increment_provider_timeouts(self) -> None:
         """Increment provider timeout count."""
-        self._provider_timeouts += 1
+        with self._lock:
+            self._provider_timeouts += 1
     
     def increment_auth_failures(self) -> None:
         """Increment auth failure count."""
-        self._auth_failures += 1
+        with self._lock:
+            self._auth_failures += 1
     
     def increment_validation_errors(self) -> None:
         """Increment validation error count."""
-        self._validation_errors += 1
+        with self._lock:
+            self._validation_errors += 1
     
     def get_snapshot(self) -> MetricsSnapshot:
         """Get current metrics snapshot."""
-        return MetricsSnapshot(
-            timestamp=datetime.utcnow(),
-            active_streams=self._active_streams,
-            total_requests=self._total_requests,
-            failed_requests=self._failed_requests,
-            total_retries=self._total_retries,
-            provider_rate_limits_hit=self._provider_rate_limits_hit,
-            provider_timeouts=self._provider_timeouts,
-            auth_failures=self._auth_failures,
-            validation_errors=self._validation_errors,
-        )
+        with self._lock:
+            return MetricsSnapshot(
+                timestamp=utc_now(),
+                active_streams=self._active_streams,
+                total_requests=self._total_requests,
+                failed_requests=self._failed_requests,
+                total_retries=self._total_retries,
+                provider_rate_limits_hit=self._provider_rate_limits_hit,
+                provider_timeouts=self._provider_timeouts,
+                auth_failures=self._auth_failures,
+                validation_errors=self._validation_errors,
+            )
     
     def reset(self) -> None:
         """Reset all metrics."""
-        self._metrics = []
-        self._active_streams = 0
-        self._total_requests = 0
-        self._failed_requests = 0
-        self._total_retries = 0
-        self._provider_rate_limits_hit = 0
-        self._provider_timeouts = 0
-        self._auth_failures = 0
-        self._validation_errors = 0
+        with self._lock:
+            self._metrics = []
+            self._active_streams = 0
+            self._total_requests = 0
+            self._failed_requests = 0
+            self._total_retries = 0
+            self._provider_rate_limits_hit = 0
+            self._provider_timeouts = 0
+            self._auth_failures = 0
+            self._validation_errors = 0
 
 
 # Global metrics instance

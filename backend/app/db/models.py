@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
+from app.core.time import utc_now
 
 class Organization(Base):
     __tablename__ = "organizations"
@@ -22,8 +23,8 @@ class Organization(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     members: Mapped[list["OrgMembership"]] = relationship(
         "OrgMembership", back_populates="organization", cascade="all, delete-orphan"
@@ -41,7 +42,7 @@ class User(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), index=True, nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     
     # Relationships
     conversations: Mapped[list["Conversation"]] = relationship(
@@ -67,14 +68,19 @@ class OrgMembership(Base):
     )
     role: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     organization: Mapped["Organization"] = relationship("Organization", back_populates="members")
     user: Mapped["User"] = relationship("User", back_populates="memberships")
 
 class Conversation(Base):
     __tablename__ = "conversations"
+
+    # Full-text search GIN index on title (trigram similarity for fast ILIKE/tsquery)
+    __table_args__ = (
+        Index("ix_conversations_title_fts", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+    )
     
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
@@ -82,10 +88,10 @@ class Conversation(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), index=True, nullable=True
     )
     title: Mapped[str] = mapped_column(String, default="New Conversation", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(
@@ -104,8 +110,8 @@ class Message(Base):
     content: Mapped[str] = mapped_column(String, nullable=False)
     model_used: Mapped[str | None] = mapped_column(String, nullable=True)
     provider_used: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # Relationships
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
@@ -135,7 +141,7 @@ class AuditLog(Base):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     meta_data: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 class UsageEvent(Base):
     __tablename__ = "usage_events"
@@ -163,7 +169,7 @@ class UsageEvent(Base):
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="success")
     meta_data: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 class DlpRule(Base):
     __tablename__ = "dlp_rules"
@@ -180,8 +186,8 @@ class DlpRule(Base):
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # allow | warn | block | escalate
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 class DlpEvent(Base):
     __tablename__ = "dlp_events"
@@ -202,7 +208,7 @@ class DlpEvent(Base):
     match_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     redacted_excerpt: Mapped[str | None] = mapped_column(Text)
     meta_data: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 class SecurityEvent(Base):
     __tablename__ = "security_events"
@@ -223,7 +229,7 @@ class SecurityEvent(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64))
     user_agent: Mapped[str | None] = mapped_column(String(256))
     meta_data: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 class ProviderPolicy(Base):
     __tablename__ = "provider_policies"
@@ -239,8 +245,8 @@ class ProviderPolicy(Base):
     allow_reasoning: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     max_cost_usd_per_day: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
     max_cost_usd_per_request: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 class ModelPolicy(Base):
     __tablename__ = "model_policies"
@@ -256,8 +262,8 @@ class ModelPolicy(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     cost_per_1k_input: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
     cost_per_1k_output: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 class RetentionPolicy(Base):
     __tablename__ = "retention_policies"
@@ -272,8 +278,8 @@ class RetentionPolicy(Base):
     soft_delete_after_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hard_delete_after_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 class RetentionJob(Base):
     __tablename__ = "retention_jobs"
@@ -284,8 +290,8 @@ class RetentionJob(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True, nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
     records_affected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     meta_data: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
@@ -310,4 +316,4 @@ class UsageDailyAggregate(Base):
     cost_usd: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
     request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

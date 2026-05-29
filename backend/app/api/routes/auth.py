@@ -24,9 +24,9 @@ async def login(login_data: UserLogin, request: Request, db: AsyncSession = Depe
     return await AuthController.login(db, login_data, client_ip, user_agent)
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Retrieve logged-in user profile details."""
-    return await AuthController.get_me(current_user)
+    return await AuthController.get_me(db, current_user)
 
 @router.post("/logout")
 async def logout(current_user: User = Depends(get_current_user)):

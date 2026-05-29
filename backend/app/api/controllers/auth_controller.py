@@ -4,8 +4,9 @@ from fastapi import HTTPException, status
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
 from app.services.security_event_service import SecurityEventService
-from app.api.schemas import UserSignup, UserLogin, TokenResponse, UserResponse
+from app.api.schemas import UserSignup, UserLogin, TokenResponse, TokenUser, UserResponse
 from app.db.models import User
+from app.db.repositories.org_membership_repository import OrgMembershipRepository
 
 class AuthController:
     @staticmethod
@@ -53,9 +54,16 @@ class AuthController:
             raise
 
     @staticmethod
-    async def get_me(current_user: User) -> UserResponse:
+    async def get_me(db: AsyncSession, current_user: User) -> UserResponse:
         """Controller to fetch currently logged-in user profile."""
-        return current_user
+        role = None
+        if current_user.organization_id:
+            membership = await OrgMembershipRepository.get_by_user_and_org(db, current_user.id, current_user.organization_id)
+            if membership:
+                role = membership.role
+        resp = UserResponse.model_validate(current_user)
+        resp.role = role
+        return resp
 
     @staticmethod
     async def logout(current_user: User) -> dict:

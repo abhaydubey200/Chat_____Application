@@ -1,5 +1,5 @@
 """
-Seed script for Dushman AI — PostgreSQL.
+Seed script for ChatHub — PostgreSQL.
 
 Creates the governance schema, all application tables, and
 inserts a comprehensive set of default / seed data for local
@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.config import settings
 from app.core.database import engine, AsyncSessionLocal, Base
 from app.core.security import get_password_hash
+from app.core.time import utc_now
 from app.db.models import (
     Organization,
     User,
@@ -168,7 +169,7 @@ RETENTION_CONFIGS = [
 # ── Helpers ──────────────────────────────────────────────────────
 
 def now():
-    return datetime.utcnow()
+    return utc_now()
 
 
 async def row_exists(table, **filters) -> bool:
@@ -206,7 +207,7 @@ async def seed_default_organization():
         return
     org = Organization(
         id=ORG_ID,
-        name="Dushman AI",
+        name="ChatHub Inc.",
         is_active=True,
     )
     async with AsyncSessionLocal() as session:
@@ -226,14 +227,14 @@ async def seed_users():
         },
         {
             "id": USER_ID,
-            "email": "user@dushman.ai",
-            "password": "User@123",
+            "email": "user@chathub.local",
+            "password": "User@12345678",
             "organization_id": ORG_ID,
         },
         {
             "id": MANAGER_ID,
-            "email": "manager@dushman.ai",
-            "password": "Manager@123",
+            "email": "manager@chathub.local",
+            "password": "Manager@123456",
             "organization_id": ORG_ID,
         },
     ]
@@ -383,7 +384,7 @@ async def seed_sample_conversation():
             id=CONV_ID,
             user_id=ADMIN_ID,
             organization_id=ORG_ID,
-            title="Hello! 👋 Welcome to Dushman AI",
+            title="Hello! 👋 Welcome to ChatHub",
         )
         session.add(conv)
         await session.flush()
@@ -400,7 +401,7 @@ async def seed_sample_conversation():
                 conversation_id=CONV_ID,
                 role="assistant",
                 content=(
-                    "Hi there! 👋 I'm Dushman AI, a multi-model AI assistant.\n\n"
+                    "Hi there! 👋 I'm ChatHub, a multi-model AI assistant.\n\n"
                     "I can help you with:\n"
                     "- **Code generation & review** 💻\n"
                     "- **Document drafting** 📝\n"
@@ -600,9 +601,9 @@ async def verify_seed():
         print("\n✅ Seed completed successfully! 🎉")
         print()
         print("  Login credentials:")
-        print("    admin@dushman.ai  /  Admin@123   (super_admin)")
-        print("    manager@dushman.ai / Manager@123  (manager)")
-        print("    user@dushman.ai   /  User@123    (employee)")
+        print("    admin@dushman.ai     /  Admin@123         (super_admin)")
+        print("    manager@chathub.local /  Manager@123456   (manager)")
+        print("    user@chathub.local    /  User@12345678    (employee)")
     else:
         print("\n⚠️  Some seed data may be missing — review the counts above.")
 
@@ -610,7 +611,7 @@ async def verify_seed():
 # ── Main ─────────────────────────────────────────────────────────
 
 async def main():
-    print("🌱 Dushman AI — Database Seed\n")
+    print("🌱 ChatHub — Database Seed\n")
 
     # 1. Ensure all models are registered on metadata
     from app.db import models as _models  # noqa: F401

@@ -5,12 +5,12 @@ from app.core.db_url import normalize_database_url
 
 class Settings(BaseSettings):
     # App Settings
-    PROJECT_NAME: str = "Dushman AI"
+    PROJECT_NAME: str = "ChatHub"
     API_V1_STR: str = "/api"
     ENV: str = "development"
     
     # Security
-    JWT_SECRET: str = Field(..., min_length=32)
+    JWT_SECRET: str = Field(..., min_length=64)
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
     
@@ -82,8 +82,12 @@ class Settings(BaseSettings):
     
     @model_validator(mode="after")
     def validate_required_config(self):
-        if not self.JWT_SECRET or "change-in-production" in self.JWT_SECRET:
-            raise ValueError("JWT_SECRET must be set to a secure value.")
+        if not self.JWT_SECRET:
+            raise ValueError("JWT_SECRET must be set.")
+        if len(self.JWT_SECRET) < 64:
+            raise ValueError("JWT_SECRET must be at least 64 characters for security.")
+        if "change" in self.JWT_SECRET.lower() or "placeholder" in self.JWT_SECRET.lower():
+            raise ValueError("JWT_SECRET must not contain placeholder values.")
         if not self.DATABASE_URL:
             raise ValueError("DATABASE_URL must be configured.")
         if self.REDIS_ENABLED and not self.REDIS_URL:

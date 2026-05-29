@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
 from sqlalchemy import select, func
 from app.core.database import AsyncSessionLocal
 from app.db.models import ProviderPolicy, ModelPolicy, UsageDailyAggregate
+from app.core.time import utc_now
 
 class ProviderPolicyService:
     @staticmethod
@@ -32,7 +32,7 @@ class ProviderPolicyService:
 
     @staticmethod
     async def daily_cost_for_provider(organization_id: uuid.UUID, provider_name: str) -> float:
-        today = datetime.utcnow().date()
+        today = utc_now().date()
         async with AsyncSessionLocal() as session:
             stmt = select(func.coalesce(func.sum(UsageDailyAggregate.cost_usd), 0)).where(
                 UsageDailyAggregate.organization_id == organization_id,

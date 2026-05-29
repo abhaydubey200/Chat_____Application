@@ -1,7 +1,7 @@
 import json
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 from fastapi import HTTPException, status, Request
@@ -67,7 +67,7 @@ class ChatController:
             user_id=str(current_user.id),
             conversation_id=str(chat_data.conversation_id),
             model_type=chat_data.model_type,
-            stream_start_time=datetime.utcnow(),
+            stream_start_time=datetime.now(timezone.utc),
         )
         set_stream_context(stream_ctx)
         
@@ -191,7 +191,7 @@ class ChatController:
             - Proper session cleanup on cancellation
             """
             chunk_count = 0
-            stream_start = datetime.utcnow()
+            stream_start = datetime.now(timezone.utc)
             first_token_received = False
             
             async with AsyncSessionLocal() as stream_db:
@@ -225,7 +225,7 @@ class ChatController:
                         # Track first token for latency measurement
                         if not first_token_received and chunk.get("type") == "delta":
                             first_token_received = True
-                            stream_ctx.first_token_time = datetime.utcnow()
+                            stream_ctx.first_token_time = datetime.now(timezone.utc)
                             logger.debug(
                                 "First token received",
                                 extra={
@@ -270,7 +270,7 @@ class ChatController:
                         extra={
                             "event_type": "stream_completed",
                             "total_chunks": chunk_count,
-                            "duration_ms": (datetime.utcnow() - stream_start).total_seconds() * 1000,
+                            "duration_ms": (datetime.now(timezone.utc) - stream_start).total_seconds() * 1000,
                         },
                     )
 
@@ -320,7 +320,7 @@ class ChatController:
                     }
                 finally:
                     # Update stream context with final metrics
-                    stream_ctx.stream_end_time = datetime.utcnow()
+                    stream_ctx.stream_end_time = datetime.now(timezone.utc)
                     
                     # Log stream lifecycle completion
                     logger.log_stream_end(

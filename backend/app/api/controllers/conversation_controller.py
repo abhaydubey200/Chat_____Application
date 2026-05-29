@@ -13,13 +13,15 @@ from app.core.cache import (
     invalidate_conversation_cache,
 )
 from app.core.config import settings
+from app.core.security_utils import sanitize_title
 from app.services.audit_service import AuditService
 
 class ConversationController:
     @staticmethod
     async def create(db: AsyncSession, user_id: uuid.UUID, create_data: ConversationCreate, organization_id: uuid.UUID | None = None) -> ConversationResponse:
         """Create a new conversation room."""
-        conversation = await ConversationRepository.create(db, user_id, create_data.title, organization_id=organization_id)
+        sanitized_title = sanitize_title(create_data.title)
+        conversation = await ConversationRepository.create(db, user_id, sanitized_title, organization_id=organization_id)
         await db.commit()
         await invalidate_conversation_cache(get_cache(), str(user_id))
         AuditService.append_background(
@@ -108,7 +110,8 @@ class ConversationController:
                 detail="Conversation not found or access denied."
             )
         
-        updated_conv = await ConversationRepository.update_title(db, conversation, update_data.title)
+        sanitized_title = sanitize_title(update_data.title)
+        updated_conv = await ConversationRepository.update_title(db, conversation, sanitized_title)
         await db.commit()
         await invalidate_conversation_cache(get_cache(), str(user_id), str(conversation_id))
         AuditService.append_background(

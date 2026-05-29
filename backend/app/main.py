@@ -1,18 +1,20 @@
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware import Middleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.time import utc_now
 from app.core.cache import init_cache, close_cache
-from app.api.routes import auth, conversations, chat
+from app.api.routes import auth, conversations, chat, admin, gdpr
 from app.core.observability import (
     configure_structured_logging,
     get_logger,
@@ -22,6 +24,7 @@ from app.core.observability import (
     clear_context,
     get_metrics,
 )
+from app.core.observability.error_types import get_error_category
 
 # Configure structured JSON logging
 log_level = logging.DEBUG if settings.ENV == "development" else logging.INFO
@@ -137,7 +140,11 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse(
     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-    content={"detail": "Rate limit exceeded. Please try again later."}
+    content={
+        "detail": "Rate limit exceeded. Please try again later.",
+        "error_type": "rate_limit_exceeded",
+        "correlation_id": str(getattr(req.state, "request_id", "")),
+    }
 ))
 app.add_middleware(SlowAPIMiddleware)
 
@@ -172,6 +179,43 @@ app.add_middleware(
 # GZIP compression for responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Security headers for production-grade hardening
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security hardening headers to all responses.
+    
+    Includes HSTS, XSS protection, content-type options, frame options,
+    and referrer-policy for defense-in-depth.
+    """
+    response = await call_next(request)
+    
+    # HSTS — only set in production to avoid issues in dev with HTTP
+    if settings.ENV == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    )
+
+    # Content-Security-Policy — restricts script/style sources to prevent XSS
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    
+    return response
+
 # Request ID tracing middleware
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
@@ -191,7 +235,7 @@ async def request_context_middleware(request: Request, call_next):
         http_path=request.url.path,
         client_ip=client_host,
         user_agent=request.headers.get("user-agent", ""),
-        start_time=datetime.utcnow(),
+        start_time=datetime.now(timezone.utc),
     )
     set_request_context(ctx)
     request.state.request_id = request_id
@@ -201,7 +245,7 @@ async def request_context_middleware(request: Request, call_next):
         
         # Update context with response info
         ctx.http_status = response.status_code
-        ctx.end_time = datetime.utcnow()
+        ctx.end_time = utc_now()
         
         response.headers["X-Request-ID"] = request_id
         return response
@@ -236,12 +280,10 @@ async def size_limit_middleware(request: Request, call_next):
                 pass
     return await call_next(request)
 
-# Global exception handler with structured error logging
-@app.exception_handler(Exception)
+# Global exception handler with structured error logging@app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler with observability context."""
-    from app.core.observability.error_types import get_error_category
-    
+
     request_ctx = get_request_context()
     error_category = get_error_category(exc)
     
@@ -261,37 +303,70 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Update metrics
     get_metrics().increment_failed_requests()
     
+    correlation_id = request_ctx.request_id if request_ctx else str(uuid.uuid4())
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "An unexpected error occurred. Please try again later."}
+        content={
+            "detail": "An unexpected error occurred. Please try again later.",
+            "error_type": type(exc).__name__,
+            "correlation_id": correlation_id,
+        }
     )
 
 # Include Router Modules
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(conversations.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
+app.include_router(admin.router, prefix=settings.API_V1_STR)
+app.include_router(gdpr.router, prefix=settings.API_V1_STR)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint with full diagnostics."""
+    """Health check endpoint with full diagnostics.
+    
+    Returns service status, database connectivity, metrics snapshot,
+    configuration diagnostics, and uptime for monitoring tools.
+    """
+    import time
     from app.core.database import verify_database_connection
     
     db_healthy = await verify_database_connection()
     metrics_snapshot = get_metrics().get_snapshot()
     
-    return {
-        "status": "healthy" if db_healthy else "degraded",
-        "service": settings.PROJECT_NAME,
-        "environment": settings.ENV,
-        "database": "ok" if db_healthy else "error",
-        "metrics": {
-            "active_streams": metrics_snapshot.active_streams,
-            "total_requests": metrics_snapshot.total_requests,
-            "failed_requests": metrics_snapshot.failed_requests,
-            "provider_rate_limits_hit": metrics_snapshot.provider_rate_limits_hit,
-            "provider_timeouts": metrics_snapshot.provider_timeouts,
+    health_status = "healthy" if db_healthy else "degraded"
+    http_status = status.HTTP_200_OK if db_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
+    
+    return JSONResponse(
+        status_code=http_status,
+        content={
+            "status": health_status,
+            "service": settings.PROJECT_NAME,
+            "version": "1.0.0",
+            "environment": settings.ENV,
+            "database": {
+                "status": "ok" if db_healthy else "error",
+                "configured": bool(settings.DATABASE_URL),
+            },
+            "llm": {
+                "provider": settings.LLM_PROVIDER,
+                "configured": bool(settings.NVIDIA_API_KEY) or bool(settings.GEMINI_API_KEY),
+            },
+            "cache": {
+                "redis_enabled": settings.REDIS_ENABLED,
+            },
+            "cors": {
+                "origins": settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["*"],
+            },
+            "metrics": {
+                "active_streams": metrics_snapshot.active_streams,
+                "total_requests": metrics_snapshot.total_requests,
+                "failed_requests": metrics_snapshot.failed_requests,
+                "provider_rate_limits_hit": metrics_snapshot.provider_rate_limits_hit,
+                "provider_timeouts": metrics_snapshot.provider_timeouts,
+            },
         }
-    }
+    )
 
 @app.get("/metrics")
 async def get_metrics_endpoint():

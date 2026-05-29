@@ -1,5 +1,5 @@
 """
-Error classification system for Dushman AI.
+Error classification system for ChatHub.
 
 Provides normalized error categories for consistent error handling, logging, and diagnostics.
 """
@@ -23,7 +23,7 @@ class ErrorCategory(str, Enum):
 
 
 class DushmanError(Exception):
-    """Base exception class for Dushman AI with observability context."""
+    """Base exception class for ChatHub with observability context."""
     
     category: ErrorCategory = ErrorCategory.UNKNOWN
     

@@ -13,8 +13,11 @@ import {
   User as UserIcon,
   Bot,
   ChevronLeft,
-  Loader2
+  Loader2,
+  Sun,
+  Moon
 } from "lucide-react";
+import { useThemeStore } from "../store/useThemeStore";
 
 interface ChatSidebarProps {
   onClose?: () => void;
@@ -96,21 +99,35 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
     }
   };
 
+  const { theme, toggleTheme } = useThemeStore();
+
   return (
-    <aside className="w-80 border-r border-slate-800 bg-slate-950 flex flex-col h-full text-slate-200">
+    <aside className="w-80 border-r border-[var(--border)] bg-[var(--bg-sidebar)] flex flex-col h-full text-[var(--text-primary)] transition-colors duration-300">
       {/* Sidebar Header */}
-      <div className="p-5 border-b border-slate-900 flex items-center gap-2.5">
+      <div className="p-5 border-b border-[var(--border)] flex items-center gap-2.5">
         <div className="p-1.5 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 shadow-md">
           <Bot className="size-5 text-white" />
         </div>
-        <div>
-          <h1 className="font-semibold text-base text-white">
-            Dushman AI
+        <div className="flex-1">
+          <h1 className="font-semibold text-base text-[var(--text-primary)]">
+            ChatHub
           </h1>
-          <span className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">
+          <span className="text-[10px] text-[var(--text-tertiary)] font-medium tracking-wide uppercase">
             LLM Orchestrator
           </span>
         </div>
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
+          title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        >
+          {theme === "dark" ? (
+            <Sun className="size-4 text-[var(--accent-amber)]" />
+          ) : (
+            <Moon className="size-4 text-[var(--primary)]" />
+          )}
+        </button>
       </div>
 
       {/* Action Button */}
@@ -121,7 +138,7 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 transition-all duration-300 shadow-lg shadow-indigo-600/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="size-4" />
-          New Conversation
+          New Chat
         </button>
       </div>
 
@@ -129,11 +146,11 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
       <div className="flex-1 overflow-y-auto px-3 space-y-1.5 custom-scrollbar">
         {loadingConversations ? (
           <div className="flex flex-col items-center py-10 px-4">
-            <Loader2 className="size-5 text-slate-600 animate-spin mb-2" />
-            <span className="text-[10px] text-slate-600 font-mono">Loading conversations…</span>
+            <Loader2 className="size-5 text-[var(--text-tertiary)] animate-spin mb-2" />
+            <span className="text-[10px] text-[var(--text-tertiary)] font-mono">Loading conversations…</span>
           </div>
         ) : conversations.length === 0 ? (
-          <div className="text-center py-8 px-4 text-xs text-slate-600">
+          <div className="text-center py-8 px-4 text-xs text-[var(--text-tertiary)]">
             No conversations yet. Start a new one!
           </div>
         ) : (
@@ -150,13 +167,13 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
                 tabIndex={0}
                 className={`group flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer transition-all duration-200 border
                   ${isSelected 
-                    ? "bg-slate-900 border-slate-800 text-white shadow-inner" 
-                    : "border-transparent text-slate-400 hover:bg-slate-900/40 hover:text-slate-200"
+                    ? "bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-primary)] shadow-inner" 
+                    : "border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                   }
                 `}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <MessageSquare className={`size-4 flex-shrink-0 ${isSelected ? "text-violet-400" : "text-slate-600"}`} />
+                  <MessageSquare className={`size-4 flex-shrink-0 ${isSelected ? "text-[var(--primary)]" : "text-[var(--text-tertiary)]"}`} />
                   
                   {isEditing ? (
                     <input
@@ -164,7 +181,7 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      className="bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5 text-xs w-full focus:outline-none focus:border-violet-500"
+                      className="bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] rounded px-1.5 py-0.5 text-xs w-full focus:outline-none focus:border-[var(--primary)]"
                     />
                   ) : (
                     <span className="text-xs font-medium truncate">
@@ -179,13 +196,13 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
                     <>
                       <button
                         onClick={(e) => handleSaveEdit(chat.id, e)}
-                        className="p-1 rounded hover:bg-slate-800 text-emerald-400 transition"
+                        className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--accent-emerald)] transition"
                       >
                         <Check className="size-3.5" />
                       </button>
                       <button
                         onClick={handleCancelEdit}
-                        className="p-1 rounded hover:bg-slate-800 text-rose-400 transition"
+                        className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--accent-rose)] transition"
                       >
                         <X className="size-3.5" />
                       </button>
@@ -194,13 +211,13 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity duration-200">
                       <button
                         onClick={(e) => handleStartEdit(chat.id, chat.title, e)}
-                        className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition"
+                        className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition"
                       >
                         <Edit3 className="size-3.5" />
                       </button>
                       <button
                         onClick={(e) => handleDelete(chat.id, e)}
-                        className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition"
+                        className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:text-[var(--accent-rose)] transition"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -214,17 +231,17 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
       </div>
 
       {/* Sidebar Footer */}
-      <div className="p-4 border-t border-slate-900 bg-slate-950/80">
-        <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/50 border border-slate-900">
+      <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-sidebar)]/80">
+        <div className="flex items-center justify-between p-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
+            <div className="size-8 rounded-full bg-[var(--bg-hover)] border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)]">
               <UserIcon className="size-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-300 truncate">
+              <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
                 {user?.email || "Anonymous"}
               </p>
-              <p className="text-[10px] text-slate-500 truncate">
+              <p className="text-[10px] text-[var(--text-tertiary)] truncate">
                 Authenticated Account
               </p>
             </div>
@@ -232,7 +249,7 @@ export default function ChatSidebar({ onClose }: ChatSidebarProps) {
           <button
             onClick={logout}
             title="Log Out"
-            className="p-2 rounded-lg text-rose-200/80 hover:text-rose-100 hover:bg-rose-950/20 border border-transparent hover:border-rose-900/30 transition-all cursor-pointer"
+            className="p-2 rounded-lg text-[var(--accent-rose)]/60 hover:text-[var(--accent-rose)] hover:bg-[var(--accent-rose)]/10 border border-transparent hover:border-[var(--accent-rose)]/20 transition-all cursor-pointer"
           >
             <LogOut className="size-4" />
           </button>

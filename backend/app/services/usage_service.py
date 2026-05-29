@@ -1,11 +1,11 @@
 import uuid
-from datetime import datetime
 from typing import Any
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from app.core.database import AsyncSessionLocal
 from app.core.observability import get_request_context, get_stream_context, get_logger
 from app.db.models import UsageEvent, UsageDailyAggregate, ModelPolicy
+from app.core.time import utc_now
 
 logger = get_logger(__name__)
 
@@ -112,7 +112,7 @@ class UsageService:
             )
             session.add(event)
 
-            usage_date = datetime.utcnow().date()
+            usage_date = utc_now().date()
             aggregate_stmt = insert(UsageDailyAggregate).values(
                 organization_id=organization_id,
                 user_id=user_id,

@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.observability import get_request_context, get_logger
+from app.core.time import utc_now
 from app.db.models import DlpRule, DlpEvent
 
 logger = get_logger(__name__)
@@ -115,7 +116,7 @@ class DlpService:
     @staticmethod
     async def _load_rules() -> list[DlpRule]:
         if DlpService._cached_rules and DlpService._cache_expires_at:
-            if datetime.utcnow() < DlpService._cache_expires_at:
+            if utc_now() < DlpService._cache_expires_at:
                 return DlpService._cached_rules
 
         async with AsyncSessionLocal() as session:
@@ -127,7 +128,7 @@ class DlpService:
                 rules = list(result.scalars().all())
 
         DlpService._cached_rules = rules
-        DlpService._cache_expires_at = datetime.utcnow() + timedelta(seconds=300)
+        DlpService._cache_expires_at = utc_now() + timedelta(seconds=300)
         return rules
 
     @staticmethod

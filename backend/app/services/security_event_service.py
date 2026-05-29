@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 from sqlalchemy import select, func
 from app.core.database import AsyncSessionLocal
 from app.core.observability import get_request_context
 from app.db.models import SecurityEvent
+from app.core.time import utc_now
 
 class SecurityEventService:
     @staticmethod
@@ -39,7 +40,7 @@ class SecurityEventService:
     async def recent_failed_logins(ip_address: str | None, window_minutes: int = 10) -> int:
         if not ip_address:
             return 0
-        cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
+        cutoff = utc_now() - timedelta(minutes=window_minutes)
         async with AsyncSessionLocal() as session:
             stmt = select(func.count()).select_from(SecurityEvent).where(
                 SecurityEvent.event_type == "auth_failed_login",
